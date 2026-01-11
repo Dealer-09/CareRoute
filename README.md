@@ -25,7 +25,19 @@ This project acts as a base level architecture ready for contributions. Follow t
 
 ### Prerequisites
 
-*   [Bun](https://bun.sh/) (v1.0 or higher)
+*   **Runtime**: [Bun](https://bun.sh/) (v1.0 or higher)
+
+    If you don't have Bun installed, run:
+
+    **Windows (PowerShell):**
+    ```powershell
+    powershell -c "irm bun.sh/install.ps1 | iex"
+    ```
+
+    **Mac/Linux/WSL:**
+    ```bash
+    curl -fsSL https://bun.sh/install | bash
+    ```
 
 ### Installation
 
@@ -56,6 +68,12 @@ We welcome contributions to make CareRoute better!
 3.  **Commit your Changes** (`git commit -m 'Add some AmazingFeature'`).
 4.  **Push to the Branch** (`git push origin feature/AmazingFeature`).
 5.  **Open a Pull Request**.
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.
+
+## 📜 Code of Conduct
+
+We are committed to providing a friendly, safe, and welcoming environment for all. Please review our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## 📄 License
 
