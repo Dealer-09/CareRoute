@@ -2,13 +2,11 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import TriageWizard from '@/components/TriageWizard'
 import AuthModal from '@/components/AuthModal'
 import { Button } from '@/components/ui/button'
 import { Stethoscope, User, Calendar, Activity, Shield, Globe, Menu, TabletSmartphone, ArrowRight } from 'lucide-react'
 
 export default function Home() {
-  const [showWizard, setShowWizard] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
   const [authType, setAuthType] = useState<'patient' | 'provider'>('patient')
 
@@ -37,7 +35,7 @@ export default function Home() {
             <button onClick={() => openAuth('patient')} className="hidden md:block text-sm font-bold text-slate-700 hover:text-blue-600 transition-colors">
               Log In
             </button>
-            <Button onClick={() => setShowWizard(true)} className="rounded-full px-6 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 transition-all transform hover:-translate-y-0.5">
+            <Button onClick={() => openAuth('patient')} className="rounded-full px-6 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 transition-all transform hover:-translate-y-0.5">
               Start Assessment
             </Button>
           </div>
@@ -73,7 +71,7 @@ export default function Home() {
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <Button size="lg" onClick={() => setShowWizard(true)} className="h-14 px-8 text-lg rounded-full">
+                  <Button size="lg" onClick={() => openAuth('patient')} className="h-14 px-8 text-lg rounded-full">
                     Start Assessment <ArrowRight className="ml-2 w-5 h-5" />
                   </Button>
                   <Button
@@ -154,7 +152,6 @@ export default function Home() {
         {/* Keeping Features & How It Works from previous iteration but simplifying styles to match cleaner look */}
       </main>
 
-      {showWizard && <TriageWizard onClose={() => setShowWizard(false)} />}
       <AuthModal isOpen={showAuth} onClose={() => setShowAuth(false)} initialUserType={authType} />
     </div>
   )
