@@ -6,11 +6,31 @@ import { Button } from '@/components/ui/button'
 import { getHistory } from '@/lib/storage'
 import { AnalysisResult } from '@/lib/rules'
 import {
-    Activity, Clock, FileText, ChevronRight, Home, Stethoscope, Calendar,
+    Activity, FileText, ChevronRight, Stethoscope, Calendar,
     Search, Settings, LayoutDashboard, History, User, LogOut, Menu, X
 } from 'lucide-react'
 
 type HistoryItem = AnalysisResult & { timestamp?: number; files?: string[] }
+
+interface NavItemProps {
+    icon: React.ElementType
+    label: string
+    active?: boolean
+    onClick?: () => void
+}
+
+const NavItem = ({ icon: Icon, label, active = false, onClick }: NavItemProps) => (
+    <button
+        onClick={onClick}
+        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${active
+            ? 'bg-blue-50 text-blue-700 font-bold'
+            : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 font-medium'
+            }`}
+    >
+        <Icon size={20} />
+        <span>{label}</span>
+    </button>
+)
 
 export default function Dashboard() {
     const [history, setHistory] = useState<HistoryItem[]>([])
@@ -28,26 +48,6 @@ export default function Dashboard() {
     const filteredHistory = history.filter(item =>
         item.summary.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.recommendedSpecialty.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-
-    interface NavItemProps {
-        icon: React.ElementType
-        label: string
-        active?: boolean
-        onClick?: () => void
-    }
-
-    const NavItem = ({ icon: Icon, label, active = false, onClick }: NavItemProps) => (
-        <button
-            onClick={onClick}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${active
-                ? 'bg-blue-50 text-blue-700 font-bold'
-                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 font-medium'
-                }`}
-        >
-            <Icon size={20} />
-            <span>{label}</span>
-        </button>
     )
 
     return (

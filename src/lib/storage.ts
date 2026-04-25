@@ -17,8 +17,3 @@ export function saveAnalysisToHistory(item: AnalysisResult & { timestamp?: numbe
     const merged = [item, ...cur].slice(0, 5)
     try { localStorage.setItem(KEY, JSON.stringify(merged)) } catch { }
 }
-
-export function clearHistory() {
-    if (typeof window === 'undefined') return
-    localStorage.removeItem(KEY)
-}

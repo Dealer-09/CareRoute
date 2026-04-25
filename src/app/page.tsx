@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import AuthModal from '@/components/AuthModal'
 import { Button } from '@/components/ui/button'
-import { Stethoscope, User, Calendar, Activity, Shield, Globe, Menu, TabletSmartphone, ArrowRight } from 'lucide-react'
+import { Stethoscope, User, Activity, Shield, TabletSmartphone, ArrowRight } from 'lucide-react'
 
 export default function Home() {
   const [showAuth, setShowAuth] = useState(false)
@@ -128,7 +128,7 @@ export default function Home() {
                 </div>
 
                 {/* Decorative blob behind cards */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-gradient-to-tr from-blue-100/50 to-indigo-100/50 rounded-full blur-3xl -z-10" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-linear-to-tr from-blue-100/50 to-indigo-100/50 rounded-full blur-3xl -z-10" />
               </div>
             </div>
 

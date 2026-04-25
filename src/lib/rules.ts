@@ -127,5 +127,3 @@ export function analyzeSymptoms(inputText: string, duration: string, flags: stri
         advice
     }
 }
-
-export default analyzeSymptoms

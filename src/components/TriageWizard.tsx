@@ -14,7 +14,7 @@ type Props = {
 
 const durations = ['Hours', '1–3 days', '4–7 days', '1–4 weeks', '>1 month']
 
-const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) => {
+export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) => {
     const [step, setStep] = useState(1)
     const [text, setText] = useState('')
     const [duration, setDuration] = useState(durations[1])
@@ -52,20 +52,6 @@ const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) => {
     }
 
     const handleBack = () => setStep(step - 1)
-
-    const Wrapper = variant === 'modal' ?
-        ({ children }: { children: React.ReactNode }) => (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto" onClick={onClose}>
-                <div className="relative w-full max-w-3xl bg-white rounded-2xl shadow-xl overflow-hidden my-auto" onClick={(e) => e.stopPropagation()}>
-                    {children}
-                </div>
-            </div>
-        ) :
-        ({ children }: { children: React.ReactNode }) => (
-            <div className="w-full max-w-3xl bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 mx-auto">
-                {children}
-            </div>
-        )
 
     const content = (
         <>
@@ -106,7 +92,7 @@ const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) => {
                                 value={text}
                                 onChange={e => setText(e.target.value)}
                                 placeholder="Example: I have a persistent cough for 3 days, mild fever, and feeling tired..."
-                                className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="flex min-h-30 w-full rounded-md border border-slate-200 bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                             />
                             <div className="flex justify-between text-xs text-slate-400">
                                 <span>{text.length} chars</span>
@@ -247,5 +233,3 @@ const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) => {
         </div>
     )
 }
-
-export default TriageWizard

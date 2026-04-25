@@ -1,8 +1,9 @@
 "use client"
 
 import React, { useState } from 'react'
+import Image from 'next/image'
 import { Button } from './ui/button'
-import { X, Mail, Lock, Stethoscope, User, Search } from 'lucide-react'
+import { X, Mail, Lock, Stethoscope, User } from 'lucide-react'
 
 type AuthMode = 'signin' | 'signup'
 type UserType = 'patient' | 'provider'
@@ -132,7 +133,7 @@ export default function AuthModal({ isOpen, onClose, initialUserType = 'patient'
 
                 <div className="grid grid-cols-2 gap-4">
                     <button className="flex items-center justify-center space-x-2 h-12 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors font-medium text-slate-700">
-                        <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5 opacity-75" />
+                        <Image src="https://www.google.com/favicon.ico" alt="Google" width={20} height={20} className="opacity-75" />
                         <span>Google</span>
                     </button>
                     <button className="flex items-center justify-center space-x-2 h-12 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors font-medium text-slate-700">

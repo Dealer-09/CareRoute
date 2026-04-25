@@ -3,7 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Users, FileText, Calendar, Bell, Search, Settings } from 'lucide-react'
+import { Bell, Search, Settings } from 'lucide-react'
 
 export default function Clinician() {
     return (
