@@ -2,16 +2,10 @@ import React from 'react'
 import doctors from '@/data/doctors'
 import { Button } from './ui/button'
 
-const parseKm = (s: string) => {
-    const m = s.match(/([0-9]+(\.[0-9]+)?)/)
-    return m ? parseFloat(m[0]) : 999
-}
-
 const DoctorList: React.FC<{ specialty: string }> = ({ specialty }) => {
-    // find doctors matching specialty, fallback to General Medicine
+    // doctors.ts is pre-sorted by distance within each specialty
     let list = doctors.filter(d => d.specialty.toLowerCase() === specialty.toLowerCase())
     if (list.length === 0) list = doctors.filter(d => d.specialty === 'General Medicine')
-    list = list.sort((a, b) => parseKm(a.location) - parseKm(b.location))
 
     return (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

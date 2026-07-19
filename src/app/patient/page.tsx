@@ -3,7 +3,6 @@
 import React from 'react'
 import Link from 'next/link'
 import { TriageWizard } from '@/components/TriageWizard'
-import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 
 export default function Patient() {
@@ -23,9 +22,12 @@ export default function Patient() {
 
             <main className="container mx-auto px-4 py-8">
                 <div className="max-w-3xl mx-auto mb-8 flex items-center">
-                    <Button variant="ghost" asChild className="mr-4">
-                        <Link href="/"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Link>
-                    </Button>
+                    <Link
+                        href="/"
+                        className="inline-flex items-center mr-4 h-10 px-4 py-2 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                    >
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Back
+                    </Link>
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900">New Assessment</h1>
                         <p className="text-slate-500 text-sm">Follow the steps below to analyze your symptoms</p>
