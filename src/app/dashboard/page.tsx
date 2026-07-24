@@ -72,13 +72,40 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [user, setUser] = useState<{ id: string, email: string, role: string } | null>(null)
 
   useEffect(() => {
-    // Small delay to avoid hydration mismatch with localStorage
-    const t = setTimeout(() => {
+    async function loadData() {
+      const token = localStorage.getItem('careRouteToken')
+      const storedUser = localStorage.getItem('careRouteUser')
+      
+      if (storedUser) {
+        setUser(JSON.parse(storedUser))
+      }
+
+      if (token) {
+        try {
+          const res = await fetch('http://localhost:4000/api/triage/history', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+          if (res.ok) {
+            const data = await res.json()
+            setHistory(data.history)
+            setLoading(false)
+            return
+          }
+        } catch (e) {
+          console.error('Failed to load DB history', e)
+        }
+      }
+      
+      // Fallback to local storage
       setHistory(getHistory())
       setLoading(false)
-    }, 80)
+    }
+    
+    // Small delay to avoid hydration mismatch
+    const t = setTimeout(loadData, 80)
     return () => clearTimeout(t)
   }, [])
 
@@ -144,23 +171,36 @@ export default function Dashboard() {
               Account
             </div>
             <div className="space-y-1">
-              <NavItem icon={Settings} label="Settings" />
-              <Link href="/" className="block">
+              <Link href="/profile" className="block">
+                <NavItem icon={Settings} label="My Profile" />
+              </Link>
+              <Link 
+                href="/" 
+                className="block"
+                onClick={() => {
+                  localStorage.removeItem('careRouteToken')
+                  localStorage.removeItem('careRouteUser')
+                }}
+              >
                 <NavItem icon={LogOut} label="Log Out" />
               </Link>
             </div>
           </div>
         </div>
 
-        {/* User footer — placeholder until real auth */}
+        {/* User footer */}
         <div className="p-5 border-t border-slate-100 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">
-              ?
+            <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm uppercase">
+              {user ? user.email.charAt(0) : '?'}
             </div>
-            <div>
-              <div className="text-sm font-bold text-slate-800">Guest User</div>
-              <div className="text-xs text-slate-400">Sign in to save progress</div>
+            <div className="overflow-hidden">
+              <div className="text-sm font-bold text-slate-800 truncate">
+                {user ? user.email : 'Guest User'}
+              </div>
+              <div className="text-xs text-slate-400">
+                {user ? 'Logged in' : 'Sign in to save progress'}
+              </div>
             </div>
           </div>
         </div>

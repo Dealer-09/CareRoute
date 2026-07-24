@@ -125,6 +125,26 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
         const withMeta: TriageResult = { ...data, files, duration }
         setResult(withMeta)
         saveAnalysisToHistory(withMeta)
+
+        // Phase 0: Save to DB if logged in
+        const token = localStorage.getItem('careRouteToken')
+        if (token) {
+          try {
+            await fetch('http://localhost:4000/api/triage/save', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                ...withMeta,
+                symptom_text: text
+              })
+            })
+          } catch (e) {
+            console.error('Failed to save to DB, but local analysis completed', e)
+          }
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Analysis failed. Please try again.'
         setError(message)
