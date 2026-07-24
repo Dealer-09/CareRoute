@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { query } from '../db/connection'
 import { requireAuth, AuthRequest } from '../middleware/auth'
+import { sendEmergencyAlert } from '../lib/telegram'
 
 const router = Router()
 
@@ -69,6 +70,23 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
       'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
       [userId, 'SAVE_TRIAGE', 'triage_cases', triageCaseId]
     )
+
+    // 4. Fire Telegram alert for Red / emergency cases (non-blocking)
+    if (data.severity === 'Red' || data.emergency) {
+      const patientResult2 = await query(
+        'SELECT name FROM patients WHERE id = $1', [patientId]
+      )
+      sendEmergencyAlert({
+        severity:             data.severity,
+        emergency:            data.emergency,
+        patientName:          patientResult2.rows[0]?.name || 'Unknown Patient',
+        conditionGuess:       data.condition_guess,
+        summary:              data.summary,
+        redFlags:             data.redFlags,
+        recommendedSpecialty: data.recommended_specialty,
+        triageCaseId,
+      }).catch(() => { /* already logged inside */ })
+    }
 
     res.json({ success: true, triageCaseId })
   } catch (err) {

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { getHistory } from '@/lib/storage'
 import type { TriageResult } from '@/types/triage'
+import DocumentManager from '@/components/DocumentManager'
 import {
   Activity,
   FileText,
@@ -377,6 +378,11 @@ export default function Dashboard() {
               })}
             </div>
           )}
+
+          {/* Documents */}
+          <div className="mt-8">
+            <DocumentManager />
+          </div>
         </main>
       </div>
     </div>

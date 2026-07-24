@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import type { TriageResult } from '@/types/triage'
 import { saveAnalysisToHistory } from '@/lib/storage'
 import DoctorList from './DoctorList'
+import NearestER from './NearestER'
 import { Button } from './ui/button'
 import {
   AlertTriangle,
@@ -402,6 +403,11 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
                     </a>
                   </div>
                 </div>
+              )}
+
+              {/* Nearest ER — only for Red / emergency */}
+              {(result.emergency || result.severity === 'Red') && (
+                <NearestER />
               )}
 
               {/* Severity card */}

@@ -6,6 +6,8 @@ import healthRoutes from './routes/health'
 import authRoutes from './routes/auth'
 import triageRoutes from './routes/triage'
 import profileRoutes from './routes/profile'
+import documentRoutes from './routes/documents'
+import mapsRoutes from './routes/maps'
 
 dotenv.config({ path: '../.env.local' })
 
@@ -21,6 +23,8 @@ app.use('/api/health', healthRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/triage', triageRoutes)
 app.use('/api/profile', profileRoutes)
+app.use('/api/documents', documentRoutes)
+app.use('/api/maps', mapsRoutes)
 
 async function startServer() {
   console.log('🚀 Starting CareRoute backend...')
