@@ -14,6 +14,7 @@ import {
   Settings,
   LayoutDashboard,
   History,
+  CalendarDays,
   User,
   LogOut,
   Menu,
@@ -174,6 +175,9 @@ export default function Dashboard() {
             <div className="space-y-1">
               <Link href="/profile" className="block">
                 <NavItem icon={Settings} label="My Profile" />
+              </Link>
+              <Link href="/appointments" className="block">
+                <NavItem icon={CalendarDays} label="My Appointments" />
               </Link>
               <Link 
                 href="/" 
