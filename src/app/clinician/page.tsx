@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Bell, Search, Settings, DatabaseZap, Loader2 } from 'lucide-react'
+import { Bell, Search, Settings, DatabaseZap, Loader2, ShieldAlert } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ function timeAgo(iso: string) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Clinician() {
+  const router = useRouter()
   const [queue, setQueue] = useState<QueueCase[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -71,11 +73,31 @@ export default function Clinician() {
   const [noteText, setNoteText] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [reviewingId, setReviewingId] = useState<string | null>(null)
+  const [authorized, setAuthorized] = useState(false)
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('careRouteToken') : null
 
+  // ─── Auth guard — redirect non-doctors immediately ──────────────────────────
   useEffect(() => {
+    const token = localStorage.getItem('careRouteToken')
+    const raw   = localStorage.getItem('careRouteUser')
+    if (!token || !raw) { router.replace('/'); return }
+    try {
+      const user = JSON.parse(raw)
+      if (user.role !== 'doctor' && user.role !== 'admin') {
+        router.replace('/')
+        return
+      }
+      setAuthorized(true)
+    } catch {
+      router.replace('/')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!authorized) return
     async function fetchQueue() {
+      const token = localStorage.getItem('careRouteToken')
       if (!token) { setError('Not authenticated'); setLoading(false); return }
       try {
         const res = await fetch('http://localhost:4000/api/triage/queue', {
@@ -96,7 +118,7 @@ export default function Clinician() {
       }
     }
     fetchQueue()
-  }, [token])
+  }, [authorized])
 
   const filtered = queue.filter(c =>
     c.patient_name.toLowerCase().includes(search.toLowerCase()) ||
