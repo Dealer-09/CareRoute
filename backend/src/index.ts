@@ -26,8 +26,9 @@ app.use('/api/triage', triageRoutes)
 app.use('/api/profile', profileRoutes)
 app.use('/api/documents', documentRoutes)
 app.use('/api/maps', mapsRoutes)
-app.use('/api/doctors', appointmentRoutes)
-app.use('/api/appointments', appointmentRoutes)
+app.use('/api/doctors', appointmentRoutes)      // GET /api/doctors, GET /api/doctors/:id/slots
+app.use('/api/appointments', appointmentRoutes)  // GET|POST|PATCH /api/appointments
+
 
 async function startServer() {
   console.log('🚀 Starting CareRoute backend...')

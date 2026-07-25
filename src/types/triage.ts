@@ -16,6 +16,9 @@ export type TriageResult = {
   reasoning: string[]          // list of reasons (from LLM or pre-check)
   redFlags: string[]           // specific red flag phrases detected
 
+  // Confidence (0–100) — how certain the model is about this severity level
+  confidence?: number
+
   // Routing
   recommended_specialty: string  // e.g. "Pulmonology"
   specialty_reason: string       // why this specialty was chosen (shown in UI)
@@ -23,8 +26,16 @@ export type TriageResult = {
   // Action
   advice: string               // what the patient should do next
 
+  // Green-specific — concrete self-care steps + when to escalate
+  self_care?: string[]         // e.g. ["Rest and hydrate", "Take paracetamol if needed"]
+  escalation_signs?: string[]  // e.g. ["If fever exceeds 39°C, see a doctor"]
+
+  // PubMed citations (fetched client-side after result)
+  pubmed_citations?: { title: string; url: string }[]
+
   // Metadata
   timestamp?: number
   duration?: string
-  files?: string[]
+  files?: string[],
+  symptom_text?: string
 }

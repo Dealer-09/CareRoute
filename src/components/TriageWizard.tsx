@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import type { TriageResult } from '@/types/triage'
 import { saveAnalysisToHistory } from '@/lib/storage'
 import DoctorList from './DoctorList'
@@ -15,6 +15,11 @@ import {
   Stethoscope,
   ChevronRight,
   Phone,
+  Mic,
+  MicOff,
+  ShieldCheck,
+  BookOpen,
+  Loader2,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -73,15 +78,78 @@ type Props = {
   variant?: 'modal' | 'inline'
 }
 
+
 export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) => {
-  const [step, setStep] = useState(1)
-  const [text, setText] = useState('')
-  const [duration, setDuration] = useState(DURATIONS[1])
-  const [flags, setFlags] = useState<string[]>([])
-  const [files, setFiles] = useState<string[]>([])
-  const [result, setResult] = useState<TriageResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [step, setStep]           = useState(1)
+  const [text, setText]           = useState('')
+  const [duration, setDuration]   = useState(DURATIONS[1])
+  const [flags, setFlags]         = useState<string[]>([])
+  const [files, setFiles]         = useState<string[]>([])
+  const [result, setResult]       = useState<TriageResult | null>(null)
+  const [error, setError]         = useState<string | null>(null)
+  const [loading, setLoading]     = useState(false)
+  const [listening, setListening] = useState(false)
+  const [pubmed, setPubmed]       = useState<{ title: string; url: string }[]>([])
+  const [pubmedLoading, setPubmedLoading] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null)
+
+  // ─── Voice-to-text ─────────────────────────────────────────────────────────
+  function toggleVoice() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any
+    const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition
+    if (!SpeechRecognition) { alert('Voice input is not supported in this browser. Try Chrome.'); return }
+
+    if (listening) {
+      recognitionRef.current?.stop()
+      setListening(false)
+      return
+    }
+
+    const rec = new SpeechRecognition()
+    rec.lang = 'en-IN'
+    rec.continuous = true
+    rec.interimResults = true
+    recognitionRef.current = rec
+
+    let final = text
+    rec.onresult = (e: any) => {
+      let interim = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) final += e.results[i][0].transcript + ' '
+        else interim = e.results[i][0].transcript
+      }
+      setText(final + interim)
+    }
+    rec.onend = () => { setText(final.trim()); setListening(false) }
+    rec.onerror = () => setListening(false)
+    rec.start()
+    setListening(true)
+  }
+
+  // ─── PubMed citations (free E-utilities API) ─────────────────────────────
+  useEffect(() => {
+    if (!result) return
+    const query = encodeURIComponent(`${result.condition_guess} triage`)
+    setPubmedLoading(true)
+    const baseUrl = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
+    fetch(`${baseUrl}/esearch.fcgi?db=pubmed&term=${query}&retmax=3&sort=relevance&retmode=json`)
+      .then(r => r.json())
+      .then(async data => {
+        const ids: string[] = data.esearchresult?.idlist ?? []
+        if (ids.length === 0) return
+        const summary = await fetch(`${baseUrl}/esummary.fcgi?db=pubmed&id=${ids.join(',')}&retmode=json`)
+        const sData = await summary.json()
+        const articles = ids.map(id => ({
+          title: sData.result?.[id]?.title ?? 'PubMed Article',
+          url: `https://pubmed.ncbi.nlm.nih.gov/${id}/`,
+        })).filter(a => a.title !== 'PubMed Article')
+        setPubmed(articles)
+      })
+      .catch(() => {})
+      .finally(() => setPubmedLoading(false))
+  }, [result])
 
   const toggleFlag = (f: string) =>
     setFlags(prev => (prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]))
@@ -239,18 +307,34 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
             </div>
 
             <div className="space-y-2">
-              <textarea
-                id="symptom-input"
-                value={text}
-                onChange={e => setText(e.target.value)}
-                placeholder="Example: I have had a persistent cough for 3 days with mild fever around 38°C. I feel very tired and my throat is sore..."
-                className="w-full min-h-[140px] rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all"
-              />
+              <div className="relative">
+                <textarea
+                  id="symptom-input"
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  placeholder="Example: I have had a persistent cough for 3 days with mild fever around 38°C. I feel very tired and my throat is sore..."
+                  className="w-full min-h-[140px] rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all pr-12"
+                />
+                <button
+                  type="button"
+                  onClick={toggleVoice}
+                  title={listening ? 'Stop recording' : 'Speak your symptoms (English or Hindi)'}
+                  className={`absolute bottom-3 right-3 p-2 rounded-full transition-all ${
+                    listening
+                      ? 'bg-red-500 text-white animate-pulse shadow-md'
+                      : 'bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-blue-600'
+                  }`}
+                >
+                  {listening ? <MicOff size={16} /> : <Mic size={16} />}
+                </button>
+              </div>
               <div className="flex justify-between items-center text-xs">
                 <span className={text.length >= 15 ? 'text-green-600 font-medium' : 'text-slate-400'}>
                   {text.length} chars {text.length >= 15 && '✓'}
                 </span>
-                <span className="text-slate-400">Minimum 15 characters</span>
+                <span className="text-slate-400 flex items-center gap-1">
+                  <Mic size={10} /> Voice input supported
+                </span>
               </div>
               {error && (
                 <div className="text-red-600 text-sm bg-red-50 border border-red-200 p-3 rounded-lg flex items-center gap-2">
@@ -259,6 +343,7 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
                 </div>
               )}
             </div>
+
           </div>
         )}
 
@@ -410,17 +495,64 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
                 <NearestER />
               )}
 
-              {/* Severity card */}
+              {/* Severity card + confidence badge */}
               <div className={`${cfg.bg} border ${cfg.border} rounded-2xl p-5`}>
-                <div className="flex items-center gap-3 mb-2">
-                  <SeverityIcon size={22} className={cfg.iconColor} />
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${cfg.badge}`}>
-                    {cfg.label}
-                  </span>
+                <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <SeverityIcon size={22} className={cfg.iconColor} />
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${cfg.badge}`}>
+                      {cfg.label}
+                    </span>
+                  </div>
+                  {result.confidence !== undefined && (
+                    <div className="flex items-center gap-1.5 bg-white/70 border border-slate-200 px-3 py-1 rounded-full">
+                      <div
+                        className={`w-2 h-2 rounded-full ${
+                          result.confidence >= 80 ? 'bg-green-500' :
+                          result.confidence >= 60 ? 'bg-amber-400' : 'bg-red-400'
+                        }`}
+                      />
+                      <span className="text-xs font-bold text-slate-700">{result.confidence}% confidence</span>
+                    </div>
+                  )}
                 </div>
                 <div className="text-xl font-bold text-slate-900 mb-1">{result.condition_guess}</div>
                 <p className="text-slate-600 text-sm leading-relaxed">{result.summary}</p>
               </div>
+
+              {/* Green reassurance block */}
+              {result.severity === 'Green' && result.self_care && result.self_care.length > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck size={18} className="text-green-600" />
+                    <span className="text-sm font-bold text-green-800">You're likely fine — here's what to do</span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-green-700 uppercase tracking-wider mb-2">Self-Care Steps</p>
+                    <ul className="space-y-1.5">
+                      {result.self_care.map((step, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-green-900">
+                          <CheckCircle size={14} className="text-green-500 mt-0.5 shrink-0" />
+                          {step}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  {result.escalation_signs && result.escalation_signs.length > 0 && (
+                    <div className="border-t border-green-200 pt-3">
+                      <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-2">⚠ Seek care if…</p>
+                      <ul className="space-y-1.5">
+                        {result.escalation_signs.map((sign, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-amber-900">
+                            <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+                            {sign}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Why this assessment — explainability */}
               <div className="bg-white border border-slate-200 rounded-2xl p-5">
@@ -483,6 +615,34 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
                       </span>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* PubMed citations */}
+              {(pubmedLoading || pubmed.length > 0) && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <BookOpen size={17} className="text-indigo-600" />
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Clinical Evidence</span>
+                    {pubmedLoading && <Loader2 size={13} className="text-slate-400 animate-spin ml-1" />}
+                  </div>
+                  {pubmed.length === 0 && pubmedLoading && (
+                    <p className="text-xs text-slate-400">Searching PubMed…</p>
+                  )}
+                  <ul className="space-y-2">
+                    {pubmed.map((p, i) => (
+                      <li key={i}>
+                        <a
+                          href={p.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-indigo-700 hover:text-indigo-900 hover:underline leading-snug line-clamp-2 block"
+                        >
+                          {p.title}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
 

@@ -1,6 +1,5 @@
 import { Router } from 'express'
 import multer from 'multer'
-import path from 'path'
 import { query } from '../db/connection'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { supabase, BUCKET } from '../lib/supabase'
@@ -46,7 +45,6 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: AuthReque
     const patientId = patientResult.rows[0].id
 
     // 2. Build a unique storage path: {patientId}/{timestamp}-{originalname}
-    const ext = path.extname(req.file.originalname).toLowerCase()
     const safeName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')
     const storagePath = `${patientId}/${Date.now()}-${safeName}`
 

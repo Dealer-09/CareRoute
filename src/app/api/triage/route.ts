@@ -7,8 +7,6 @@ import type { TriageResult } from '@/types/triage'
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
 // ─── Strict JSON Schema ───────────────────────────────────────────────────────
-// Gemini enforces this at generation time — it physically cannot produce a
-// response that violates this shape. No more manual ?? fallbacks needed.
 const TRIAGE_SCHEMA: Schema = {
   type: SchemaType.OBJECT,
   properties: {
@@ -17,6 +15,10 @@ const TRIAGE_SCHEMA: Schema = {
       format: 'enum',
       enum: ['Green', 'Amber', 'Red'],
       description: 'Triage severity level',
+    },
+    confidence: {
+      type: SchemaType.INTEGER,
+      description: 'Confidence in this severity level, 0–100. Be honest — if symptoms are ambiguous, score lower (50–70). If clear-cut, score higher (85–99).',
     },
     condition_guess: {
       type: SchemaType.STRING,
@@ -48,9 +50,20 @@ const TRIAGE_SCHEMA: Schema = {
       type: SchemaType.STRING,
       description: 'Concrete, specific next steps the patient should take now.',
     },
+    self_care: {
+      type: SchemaType.ARRAY,
+      items: { type: SchemaType.STRING },
+      description: 'For GREEN cases: 2–4 specific self-care steps (e.g. "Drink 2–3 litres of water daily"). Empty array for Amber/Red.',
+    },
+    escalation_signs: {
+      type: SchemaType.ARRAY,
+      items: { type: SchemaType.STRING },
+      description: 'For GREEN cases: 2–3 specific signs that mean they should seek care (e.g. "If fever exceeds 39°C"). Empty array for Amber/Red.',
+    },
   },
   required: [
     'severity',
+    'confidence',
     'condition_guess',
     'summary',
     'reasoning',
@@ -58,12 +71,29 @@ const TRIAGE_SCHEMA: Schema = {
     'recommended_specialty',
     'specialty_reason',
     'advice',
+    'self_care',
+    'escalation_signs',
   ],
 }
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
-// Clinical rules are explicit — not vague. Each severity tier has named signals.
-const SYSTEM_PROMPT = `You are CareRoute, a clinical triage assistant. Your role is to assess symptom severity and route patients to the correct care. You do NOT diagnose — you triage.
+const SYSTEM_PROMPT = `You are CareRoute, a clinical triage assistant for Indian patients. Your role is to assess symptom severity and route patients to the correct care. You do NOT diagnose — you triage.
+
+CULTURAL CONTEXT — INDIAN PATIENT IDIOMS:
+Patients may describe symptoms using Indian English idioms or colloquial expressions. Interpret these clinically:
+• "motions" / "loose motions" = diarrhoea
+• "urine burning" / "burning micturition" = dysuria (possible UTI)
+• "acidity" / "gas problem" = dyspepsia, GERD, or bloating
+• "body pain" = myalgia (generalised muscle ache — often viral)
+• "weakness" / "fatigue all over" = generalised asthenia
+• "BP problem" = hypertension or hypotension
+• "sugar problem" / "sugar high" = hyperglycaemia / diabetes concern
+• "stomach upset" = nausea, vomiting, or abdominal discomfort
+• "heaviness in chest" = may indicate cardiac or anxiety origin — treat as Amber minimum
+• "fits" = seizure / convulsion — treat as Red
+• "giddiness" / "giddyness" = dizziness or vertigo
+• "numbness-tingling" = paraesthesia
+• "neck pain going to hand" = possible cervical radiculopathy
 
 SEVERITY RULES (apply strictly in order):
 
@@ -72,7 +102,7 @@ RED — Patient needs care TODAY. Use when ANY of:
 • Severe difficulty breathing or cyanosis (blue lips/fingertips)
 • Sudden confusion, loss of consciousness, or fainting
 • Suspected stroke (face droop, arm weakness, slurred speech, sudden severe headache)
-• Active seizure or convulsion
+• Active seizure / "fits"
 • Uncontrolled bleeding
 • Severe abdominal rigidity or sudden sharp abdominal pain (possible perforation)
 • Symptoms rapidly worsening over minutes to hours
@@ -89,6 +119,7 @@ AMBER — Needs clinical review within 24–48 hours. Use when:
 • Respiratory infection with productive cough lasting >3 weeks (TB screening)
 • Any symptom in pregnancy that would be Amber or above
 • Chronic condition (diabetes, asthma, hypertension) showing unusual pattern
+• "Heaviness in chest" or cardiac-sounding symptoms in any age group
 
 GREEN — Self-care appropriate. Use when:
 • Mild, short-duration symptoms (<72 hours)
@@ -104,17 +135,19 @@ ADVICE RULES:
 • Amber: State a specific timeframe ("See a doctor within 24 hours")
 • Green: Give concrete self-care steps (hydration, rest, specific OTC options if relevant)
 • Never say "monitor symptoms" without a follow-up condition ("If X worsens, go to Y")
-• Never give a definitive diagnosis — use phrases like "possibly", "consistent with", "may indicate"`
+• Never give a definitive diagnosis — use phrases like "possibly", "consistent with", "may indicate"
+
+GREEN REASSURANCE:
+For Green cases, self_care must have 2–4 specific actionable steps (not vague). escalation_signs must include exactly when to seek help (specific thresholds, not "if it gets worse").`
 
 // ─── Safe Amber Fallback ──────────────────────────────────────────────────────
-// Returned when Gemini is unavailable or returns an unexpected error.
-// Conservative (Amber not Green) because we don't know what was wrong.
 function amberFallback(text: string, errorReason: string): TriageResult {
   console.error('[/api/triage] Falling back to Amber:', errorReason)
   const specialtyMatch = matchSpecialty(text)
   return {
     severity: 'Amber',
     emergency: false,
+    confidence: 50,
     condition_guess: 'Unable to assess',
     summary:
       'Our AI triage system encountered an issue. As a precaution, we recommend seeing a doctor within 24–48 hours.',
@@ -127,6 +160,8 @@ function amberFallback(text: string, errorReason: string): TriageResult {
     specialty_reason: specialtyMatch.reason,
     advice:
       'Because automated triage could not complete, please see a doctor within 24 hours to be assessed in person. If your symptoms worsen significantly or you experience chest pain, difficulty breathing, or loss of consciousness, call 112 immediately.',
+    self_care: [],
+    escalation_signs: [],
     timestamp: Date.now(),
   }
 }
@@ -148,14 +183,13 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── Step 1: Emergency Pre-Check ──────────────────────────────────────────
-    // Deterministic safety net. Runs before any LLM call.
-    // If it fires → return Red immediately, no Gemini call.
     const emergency = emergencyPreCheck(text, flags)
 
     if (emergency.triggered) {
       const result: TriageResult = {
         severity: 'Red',
         emergency: true,
+        confidence: 99,
         condition_guess: 'Possible Emergency Condition',
         summary:
           'Your symptoms match a pattern that requires immediate emergency medical attention. Do not wait.',
@@ -166,21 +200,21 @@ export async function POST(req: NextRequest) {
           'Emergency pre-check triggered — bypass specialist routing. Go to the nearest ER.',
         advice:
           'Call emergency services (112) immediately or go to the nearest Emergency Room. Do not drive yourself. If you are alone, leave your door unlocked and call 112 now.',
+        self_care: [],
+        escalation_signs: [],
         timestamp: Date.now(),
       }
       return NextResponse.json(result)
     }
 
     // ─── Step 2: Gemini LLM Triage ────────────────────────────────────────────
-    // Strict schema enforced at generation time — Gemini cannot return
-    // a malformed response. JSON.parse is still guarded but should never throw.
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
       systemInstruction: SYSTEM_PROMPT,
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: TRIAGE_SCHEMA,
-        temperature: 0.2, // Low temperature = more deterministic, clinical responses
+        temperature: 0.2,
       },
     })
 
@@ -194,6 +228,7 @@ Apply the severity rules strictly. Provide your triage assessment.`
 
     let parsed: {
       severity: TriageResult['severity']
+      confidence: number
       condition_guess: string
       summary: string
       reasoning: string[]
@@ -201,32 +236,29 @@ Apply the severity rules strictly. Provide your triage assessment.`
       recommended_specialty: string
       specialty_reason: string
       advice: string
+      self_care: string[]
+      escalation_signs: string[]
     }
 
     try {
       const geminiResult = await model.generateContent(userPrompt)
       parsed = JSON.parse(geminiResult.response.text())
     } catch (geminiError) {
-      // Gemini failed or returned unparseable output — return safe fallback
-      return NextResponse.json(
-        amberFallback(text, String(geminiError))
-      )
+      return NextResponse.json(amberFallback(text, String(geminiError)))
     }
 
-    // Validate severity is one of our known values (extra safety)
     const validSeverities: TriageResult['severity'][] = ['Green', 'Amber', 'Red']
     if (!validSeverities.includes(parsed.severity)) {
       return NextResponse.json(amberFallback(text, `Invalid severity: ${parsed.severity}`))
     }
 
     // ─── Step 3: Deterministic Specialty Override ──────────────────────────────
-    // Our lookup table takes precedence over the LLM's specialty suggestion.
-    // Specialty routing is solved knowledge — not something a model should guess.
     const specialtyMatch = matchSpecialty(text, parsed.recommended_specialty)
 
     const result: TriageResult = {
       severity: parsed.severity,
       emergency: false,
+      confidence: Math.min(100, Math.max(0, parsed.confidence ?? 75)),
       condition_guess: parsed.condition_guess,
       summary: parsed.summary,
       reasoning: parsed.reasoning,
@@ -234,12 +266,13 @@ Apply the severity rules strictly. Provide your triage assessment.`
       recommended_specialty: specialtyMatch.specialty,
       specialty_reason: specialtyMatch.reason,
       advice: parsed.advice,
+      self_care: parsed.self_care ?? [],
+      escalation_signs: parsed.escalation_signs ?? [],
       timestamp: Date.now(),
     }
 
     return NextResponse.json(result)
   } catch (error) {
-    // Top-level catch — unexpected errors (network, auth, etc.)
     console.error('[/api/triage] Unexpected error:', error)
     return NextResponse.json(amberFallback(text, String(error)))
   }

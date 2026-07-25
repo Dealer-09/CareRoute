@@ -25,9 +25,3 @@ export function saveAnalysisToHistory(item: TriageResult): void {
   }
 }
 
-export function clearHistory(): void {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.removeItem(KEY)
-  } catch { /* ignore */ }
-}
