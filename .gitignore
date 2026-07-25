@@ -42,3 +42,6 @@ backend/dist
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# one-off scripts (seed, migrations runner) — local only
+backend/src/scripts/
