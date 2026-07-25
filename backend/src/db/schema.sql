@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS patients (
 );
 
 -- ─── doctors ──────────────────────────────────────────────────────────────────
--- Can be seeded (no user_id) or linked to an auth account (user_id set).
 CREATE TABLE IF NOT EXISTS doctors (
   id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id        UUID        REFERENCES users(id) ON DELETE SET NULL,
@@ -87,7 +86,6 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 -- ─── doctor_slots ──────────────────────────────────────────────────────────────
--- Each row = one 30-min bookable slot for a doctor.
 CREATE TABLE IF NOT EXISTS doctor_slots (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   doctor_id   UUID        NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
@@ -98,7 +96,6 @@ CREATE TABLE IF NOT EXISTS doctor_slots (
 );
 
 -- ─── appointments ─────────────────────────────────────────────────────────────
--- Links a patient to a booked doctor slot.
 CREATE TABLE IF NOT EXISTS appointments (
   id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   patient_id      UUID        NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
@@ -111,7 +108,19 @@ CREATE TABLE IF NOT EXISTS appointments (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ─── Indexes ──────────────────────────────────────────────────────────────────
+-- ─── Migrations — run BEFORE indexes so columns exist when indexed ─────────────
+DO $$ BEGIN
+  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed       BOOLEAN     NOT NULL DEFAULT FALSE;
+  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed_by    UUID        REFERENCES users(id) ON DELETE SET NULL;
+  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed_at    TIMESTAMPTZ;
+  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS clinician_note TEXT;
+  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS bio            TEXT;
+  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS experience_yrs INT;
+  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS fee_inr        INT;
+  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS rating         NUMERIC(3,1);
+END $$;
+
+-- ─── Indexes — after migrations so all columns exist ──────────────────────────
 CREATE INDEX IF NOT EXISTS idx_patients_user_id          ON patients(user_id);
 CREATE INDEX IF NOT EXISTS idx_triage_cases_patient_id   ON triage_cases(patient_id);
 CREATE INDEX IF NOT EXISTS idx_triage_cases_severity     ON triage_cases(severity);
@@ -125,16 +134,3 @@ CREATE INDEX IF NOT EXISTS idx_doctor_slots_is_booked    ON doctor_slots(is_book
 CREATE INDEX IF NOT EXISTS idx_appointments_patient_id   ON appointments(patient_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_doctor_id    ON appointments(doctor_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_status       ON appointments(status);
-
--- ─── Migrations ────────────────────────────────────────────────────────────────
--- Idempotent column additions for existing tables (safe to re-run)
-DO $$ BEGIN
-  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed       BOOLEAN     NOT NULL DEFAULT FALSE;
-  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed_by    UUID        REFERENCES users(id) ON DELETE SET NULL;
-  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed_at    TIMESTAMPTZ;
-  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS clinician_note TEXT;
-  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS bio            TEXT;
-  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS experience_yrs INT;
-  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS fee_inr        INT;
-  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS rating         NUMERIC(3,1);
-END $$;
