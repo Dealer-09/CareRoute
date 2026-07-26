@@ -174,6 +174,17 @@ export async function POST(req: NextRequest) {
     text = body.text ?? ''
     const duration: string = body.duration ?? 'Not specified'
     const flags: string[] = body.flags ?? []
+    const vitals = body.vitals ?? {}
+
+    // Build optional vitals string for Gemini
+    const vitalsLines: string[] = []
+    if (vitals.heartRate)     vitalsLines.push(`Heart Rate: ${vitals.heartRate} bpm`)
+    if (vitals.spo2)          vitalsLines.push(`SpO₂: ${vitals.spo2}%`)
+    if (vitals.temperature)   vitalsLines.push(`Temperature: ${vitals.temperature}°C`)
+    if (vitals.bloodPressure) vitalsLines.push(`Blood Pressure: ${vitals.bloodPressure} mmHg`)
+    const vitalsSection = vitalsLines.length > 0
+      ? `\nVitals provided by patient:\n${vitalsLines.map(l => `• ${l}`).join('\n')}`
+      : ''
 
     if (!text || text.trim().length < 15) {
       return NextResponse.json(
@@ -222,7 +233,7 @@ export async function POST(req: NextRequest) {
 
 Description: "${text.trim()}"
 Duration: ${duration}
-Critical flags checked by patient: ${flags.length > 0 ? flags.join(', ') : 'None'}
+Critical flags checked by patient: ${flags.length > 0 ? flags.join(', ') : 'None'}${vitalsSection}
 
 Apply the severity rules strictly. Provide your triage assessment.`
 

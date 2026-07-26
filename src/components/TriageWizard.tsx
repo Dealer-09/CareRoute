@@ -94,6 +94,12 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
 
+  // Optional vitals — all strings so empty = not provided
+  const [heartRate, setHeartRate] = useState('')
+  const [spo2, setSpo2]           = useState('')
+  const [temperature, setTemperature] = useState('')
+  const [bloodPressure, setBloodPressure] = useState('')
+
   // ─── Voice-to-text ─────────────────────────────────────────────────────────
   function toggleVoice() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -182,7 +188,15 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
         const res = await fetch('/api/triage', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, duration, flags }),
+          body: JSON.stringify({
+            text, duration, flags,
+            vitals: {
+              heartRate:     heartRate     || undefined,
+              spo2:          spo2          || undefined,
+              temperature:   temperature   || undefined,
+              bloodPressure: bloodPressure || undefined,
+            },
+          }),
         })
 
         if (!res.ok) {
@@ -401,6 +415,35 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
                       />
                       <span className="text-sm font-medium text-slate-900">{f}</span>
                     </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Vitals — optional, improves triage accuracy */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Vitals{' '}
+                  <span className="text-slate-400 font-normal">(optional — helps the AI triage more accurately)</span>
+                </label>
+                <div className="grid grid-cols-2 gap-3 mt-2">
+                  {[
+                    { label: 'Heart Rate', unit: 'bpm', placeholder: 'e.g. 88', value: heartRate, set: setHeartRate, id: 'vitals-hr' },
+                    { label: 'SpO₂', unit: '%', placeholder: 'e.g. 96', value: spo2, set: setSpo2, id: 'vitals-spo2' },
+                    { label: 'Temperature', unit: '°C', placeholder: 'e.g. 38.5', value: temperature, set: setTemperature, id: 'vitals-temp' },
+                    { label: 'Blood Pressure', unit: 'mmHg', placeholder: 'e.g. 120/80', value: bloodPressure, set: setBloodPressure, id: 'vitals-bp' },
+                  ].map(({ label, unit, placeholder, value, set, id }) => (
+                    <div key={id} className="bg-white border border-slate-200 rounded-xl px-3 py-2">
+                      <div className="text-xs font-semibold text-slate-500 mb-1">{label} <span className="font-normal text-slate-400">({unit})</span></div>
+                      <input
+                        id={id}
+                        type="text"
+                        inputMode="decimal"
+                        value={value}
+                        onChange={e => set(e.target.value)}
+                        placeholder={placeholder}
+                        className="w-full text-sm text-slate-800 placeholder:text-slate-300 bg-transparent focus:outline-none"
+                      />
+                    </div>
                   ))}
                 </div>
               </div>

@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   CheckCircle,
   AlertCircle,
+  TrendingUp,
 } from 'lucide-react'
 
 // ─── Sidebar Nav Item ─────────────────────────────────────────────────────────
@@ -163,6 +164,9 @@ export default function Dashboard() {
               <NavItem icon={LayoutDashboard} label="Dashboard" active />
               <Link href="/patient" className="block">
                 <NavItem icon={Activity} label="New Assessment" />
+              </Link>
+              <Link href="/timeline" className="block">
+                <NavItem icon={TrendingUp} label="Symptom Timeline" />
               </Link>
               <NavItem icon={History} label="My History" />
               <NavItem icon={User} label="My Doctors" />

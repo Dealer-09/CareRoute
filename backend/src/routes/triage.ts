@@ -1,10 +1,21 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import jwt from 'jsonwebtoken'
 import { query } from '../db/connection'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { sendEmergencyAlert } from '../lib/telegram'
+import { addConnection, removeConnection, broadcast } from '../lib/sse'
 
 const router = Router()
+
+// Helper: verify JWT from query param (EventSource can't set headers)
+function verifyToken(token: string): { id: string; role: string } | null {
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET!) as { id: string; role: string }
+  } catch {
+    return null
+  }
+}
 
 // TriageResult schema based on our frontend type
 const triageCaseSchema = z.object({
@@ -88,6 +99,17 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
       }).catch(() => { /* already logged inside */ })
     }
 
+    // 5. Broadcast to all connected clinician SSE streams
+    broadcast('new_case', {
+      id:                    triageCaseId,
+      severity:              data.severity,
+      emergency:             data.emergency,
+      condition_guess:       data.condition_guess,
+      summary:               data.summary,
+      recommended_specialty: data.recommended_specialty,
+      created_at:            new Date().toISOString(),
+    })
+
     res.json({ success: true, triageCaseId })
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -134,6 +156,38 @@ router.get('/history', requireAuth, async (req: AuthRequest, res) => {
   }
 })
 
+
+// Clinician-only route: live queue stream (Server-Sent Events)
+// EventSource cannot set custom headers — accept ?token= as a fallback
+router.get('/queue/stream', (req, res, next) => {
+  const token = req.query.token as string
+  if (token) {
+    const user = verifyToken(token)
+    if (user) {
+      (req as AuthRequest).user = user
+      return next()
+    }
+  }
+  requireAuth(req, res, next)
+}, (req: AuthRequest, res) => {
+  const { role } = req.user!
+  if (role !== 'doctor' && role !== 'admin') {
+    return res.status(403).json({ error: 'Clinician access required' })
+  }
+
+  res.setHeader('Content-Type',  'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection',    'keep-alive')
+  res.flushHeaders()
+
+  // Send a heartbeat immediately so the client knows it's connected
+  res.write('event: connected\ndata: {}\n\n')
+
+  const id = addConnection(res)
+
+  // Clean up when the client disconnects
+  req.on('close', () => removeConnection(id))
+})
 
 // Clinician-only route: all triage cases across all patients
 router.get('/queue', requireAuth, async (req: AuthRequest, res) => {

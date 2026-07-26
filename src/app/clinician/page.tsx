@@ -1,10 +1,10 @@
 "use client"
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Bell, Search, Settings, DatabaseZap, Loader2, ShieldAlert } from 'lucide-react'
+import { Bell, Search, Settings, DatabaseZap, Loader2, ShieldAlert, Radio } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,6 +74,8 @@ export default function Clinician() {
   const [savingNote, setSavingNote] = useState(false)
   const [reviewingId, setReviewingId] = useState<string | null>(null)
   const [authorized, setAuthorized] = useState(false)
+  const [liveConnected, setLiveConnected] = useState(false)
+  const sseRef = useRef<EventSource | null>(null)
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('careRouteToken') : null
 
@@ -94,30 +96,49 @@ export default function Clinician() {
     }
   }, [])
 
+  // ─── Initial queue fetch + SSE subscription ─────────────────────────────────
   useEffect(() => {
     if (!authorized) return
-    async function fetchQueue() {
-      const token = localStorage.getItem('careRouteToken')
-      if (!token) { setError('Not authenticated'); setLoading(false); return }
-      try {
-        const res = await fetch('http://localhost:4000/api/triage/queue', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
+    const token = localStorage.getItem('careRouteToken')
+    if (!token) { setError('Not authenticated'); setLoading(false); return }
+
+    // 1. Load initial queue via REST
+    fetch('http://localhost:4000/api/triage/queue', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(res => {
         if (res.status === 403) {
           setError('This page is for clinicians only. Log in with a doctor account.')
-          setLoading(false)
-          return
+          return null
         }
         if (!res.ok) throw new Error('Failed to load queue')
-        const data = await res.json()
-        setQueue(data.queue)
-      } catch {
-        setError('Could not load patient queue. Make sure the backend is running.')
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchQueue()
+        return res.json()
+      })
+      .then(data => { if (data) setQueue(data.queue) })
+      .catch(() => setError('Could not load patient queue. Make sure the backend is running.'))
+      .finally(() => setLoading(false))
+
+    // 2. Subscribe to live updates via SSE
+    const es = new EventSource(
+      `http://localhost:4000/api/triage/queue/stream?token=${token}`
+    )
+    sseRef.current = es
+
+    es.addEventListener('connected', () => setLiveConnected(true))
+    es.addEventListener('new_case', (e: MessageEvent) => {
+      try {
+        // Re-fetch the full queue to get complete patient details
+        fetch('http://localhost:4000/api/triage/queue', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then(r => r.json())
+          .then(data => setQueue(data.queue))
+          .catch(() => {})
+      } catch { /* ignore */ }
+    })
+    es.onerror = () => setLiveConnected(false)
+
+    return () => { es.close(); setLiveConnected(false) }
   }, [authorized])
 
   const filtered = queue.filter(c =>
@@ -210,7 +231,13 @@ export default function Clinician() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Patient Queue</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-slate-900">Patient Queue</h1>
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${liveConnected ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                <Radio size={11} className={liveConnected ? 'text-green-500' : 'text-slate-400'} />
+                {liveConnected ? 'Live' : 'Connecting…'}
+              </div>
+            </div>
             <p className="text-slate-500 text-sm mt-1">
               {loading ? 'Loading…' : `${unreviewedCount} unreviewed triage assessment${unreviewedCount !== 1 ? 's' : ''} awaiting review`}
             </p>
