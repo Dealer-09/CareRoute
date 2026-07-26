@@ -33,6 +33,7 @@ const triageCaseSchema = z.object({
   symptom_text:          z.string().optional(),
   for_dependent_id:      z.string().uuid().optional(),
   for_name:              z.string().optional(),
+  confidence:            z.number().int().min(0).max(100).optional(),
 })
 
 // Protected route: Save a new triage case
@@ -59,8 +60,8 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
       `INSERT INTO triage_cases (
         patient_id, severity, emergency, condition_guess, summary,
         reasoning, red_flags, recommended_specialty, specialty_reason,
-        advice, duration, symptom_text, for_dependent_id, for_name
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id`,
+        advice, duration, symptom_text, for_dependent_id, for_name, confidence
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id`,
       [
         patientId,
         data.severity,
@@ -76,6 +77,7 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
         data.symptom_text,
         data.for_dependent_id ?? null,
         data.for_name ?? null,
+        data.confidence ?? null,
       ]
     )
 

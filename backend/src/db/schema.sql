@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS triage_cases (
   reviewed_by           UUID        REFERENCES users(id) ON DELETE SET NULL,
   reviewed_at           TIMESTAMPTZ,
   clinician_note        TEXT,
+  confidence            INT,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -131,7 +132,8 @@ CREATE TABLE IF NOT EXISTS follow_ups (
   due_at          TIMESTAMPTZ NOT NULL,
   sent            BOOLEAN     NOT NULL DEFAULT FALSE,
   sent_at         TIMESTAMPTZ,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (triage_case_id)
 );
 
 DO $$ BEGIN
@@ -141,6 +143,8 @@ DO $$ BEGIN
   ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS clinician_note    TEXT;
   ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS for_dependent_id  UUID        REFERENCES dependents(id) ON DELETE SET NULL;
   ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS for_name          TEXT;
+  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS confidence        INT;
+  ALTER TABLE follow_ups   ADD CONSTRAINT follow_ups_triage_case_id_key UNIQUE (triage_case_id);
   ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS bio               TEXT;
   ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS experience_yrs    INT;
   ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS fee_inr           INT;

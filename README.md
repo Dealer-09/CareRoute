@@ -354,7 +354,6 @@ erDiagram
 | Method | Endpoint | Description |
 |---|---|---|
 | POST | `/api/triage` | Gemini triage proxy (called by TriageWizard) |
-| POST | `/api/documents/extract` | Gemini document field extraction |
 
 ### Utility
 | Method | Endpoint | Auth | Description |
@@ -437,8 +436,7 @@ CareRoute/
 │   │   ├── admin/page.tsx             # Admin stats / users / audit
 │   │   ├── timeline/page.tsx          # Symptom progression timeline
 │   │   └── api/
-│   │       ├── triage/route.ts        # Gemini triage proxy
-│   │       └── documents/extract/     # Gemini document extraction
+│   │       └── triage/route.ts        # Gemini triage proxy
 │   ├── components/
 │   │   ├── TriageWizard.tsx           # Full triage flow (voice, vitals, dependents)
 │   │   ├── DoctorList.tsx             # Specialist cards with booking

@@ -72,7 +72,7 @@ router.get('/nearest-er', async (req, res) => {
         const name    = el.tags?.name ?? 'Hospital'
         const phone   = el.tags?.['contact:phone'] ?? el.tags?.phone ?? null
         const website = el.tags?.website ?? null
-        const emergency = el.tags?.emergency === 'yes' || el.tags?.['emergency'] !== 'no'
+        const emergency = el.tags?.emergency === 'yes'
 
         return {
           id:       el.id,
