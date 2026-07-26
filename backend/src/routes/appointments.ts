@@ -45,49 +45,6 @@ router.get('/:id/slots', async (req, res) => {
   }
 })
 
-// ─── POST /api/doctors/:id/slots/seed — generate slots for next 7 days ────────
-// Dev/admin utility: auto-generate 30-min slots (9am–5pm) for a doctor.
-router.post('/:id/slots/seed', requireAuth, async (req: AuthRequest, res) => {
-  if (req.user!.role !== 'admin' && req.user!.role !== 'doctor') {
-    return res.status(403).json({ error: 'Admin or doctor access required' })
-  }
-  const { id } = req.params
-  try {
-    const doctor = await query('SELECT id FROM doctors WHERE id = $1', [id])
-    if (doctor.rows.length === 0) return res.status(404).json({ error: 'Doctor not found' })
-
-    // Generate 9am–5pm slots (30 min each) for next 7 days
-    const slots: string[] = []
-    const now = new Date()
-    for (let d = 1; d <= 7; d++) {
-      const day = new Date(now)
-      day.setDate(now.getDate() + d)
-      for (let h = 9; h < 17; h++) {
-        for (const m of [0, 30]) {
-          day.setHours(h, m, 0, 0)
-          slots.push(day.toISOString())
-        }
-      }
-    }
-
-    let inserted = 0
-    for (const slot of slots) {
-      try {
-        await query(
-          'INSERT INTO doctor_slots (doctor_id, starts_at) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-          [id, slot]
-        )
-        inserted++
-      } catch { /* skip duplicates */ }
-    }
-
-    res.json({ success: true, slots_created: inserted })
-  } catch (err) {
-    console.error('POST /doctors/:id/slots/seed error:', err)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-})
-
 // ─── POST /api/appointments — book a slot ─────────────────────────────────────
 router.post('/', requireAuth, async (req: AuthRequest, res) => {
   const schema = z.object({
