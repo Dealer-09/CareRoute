@@ -22,8 +22,11 @@ CREATE TABLE IF NOT EXISTS patients (
   name          TEXT,
   date_of_birth DATE,
   gender        TEXT        CHECK (gender IN ('M', 'F', 'Other')),
+  phone         TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS phone TEXT;
+
 
 -- ─── doctors ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS doctors (

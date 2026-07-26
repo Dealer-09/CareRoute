@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { BACKEND_URL } from '@/lib/api'
 
 import React, { useEffect, useState } from 'react'
@@ -24,6 +24,7 @@ import {
   CheckCircle,
   AlertCircle,
   TrendingUp,
+  ShieldCheck,
 } from 'lucide-react'
 
 // ─── Sidebar Nav Item ─────────────────────────────────────────────────────────
@@ -212,7 +213,19 @@ export default function Dashboard() {
                 {user ? 'Logged in' : 'Sign in to save progress'}
               </div>
             </div>
-          </div>
+
+          {user?.role === 'admin' && (
+            <div>
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-3">
+                Admin
+              </div>
+              <div className="space-y-1">
+                <Link href="/admin" className="block">
+                  <NavItem icon={ShieldCheck} label="Admin Panel" />
+                </Link>
+              </div>
+            </div>
+          )}          </div>
         </div>
       </aside>
 

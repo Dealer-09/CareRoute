@@ -21,6 +21,7 @@ type Profile = {
   name: string
   date_of_birth: string | null
   gender: 'M' | 'F' | 'Other' | null
+  phone: string | null
   email: string
   role: string
 }
@@ -40,6 +41,7 @@ export default function ProfilePage() {
   const [name, setName]         = useState('')
   const [dob, setDob]           = useState('')
   const [gender, setGender]     = useState<'M' | 'F' | 'Other' | ''>('')
+  const [phone, setPhone]       = useState('')
   const [loading, setLoading]   = useState(true)
   const [status, setStatus]     = useState<Status>('idle')
   const [errorMsg, setErrorMsg] = useState('')
@@ -76,6 +78,7 @@ export default function ProfilePage() {
         setName(data.name || '')
         setDob(data.date_of_birth ? data.date_of_birth.split('T')[0] : '')
         setGender(data.gender || '')
+        setPhone(data.phone || '')
         fetchDependents(token)
       } catch {
         setErrorMsg('Could not load your profile. Please try again.')
@@ -96,6 +99,7 @@ export default function ProfilePage() {
       if (name.trim()) body.name = name.trim()
       if (dob) body.date_of_birth = dob
       if (gender) body.gender = gender
+      if (phone.trim()) body.phone = phone.trim()
 
       const res = await fetch(`${BACKEND_URL}/api/profile`, {
         method: 'PATCH',
@@ -208,6 +212,13 @@ export default function ProfilePage() {
             <label className="block text-sm font-medium text-slate-700 mb-1.5" htmlFor="dob">Date of Birth</label>
             <input id="dob" type="date" value={dob} onChange={e => setDob(e.target.value)}
               max={new Date().toISOString().split('T')[0]}
+              className="w-full h-11 px-4 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white transition" />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5" htmlFor="phone">Phone Number</label>
+            <input id="phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+              placeholder="e.g. +91 98765 43210"
               className="w-full h-11 px-4 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white transition" />
           </div>
 

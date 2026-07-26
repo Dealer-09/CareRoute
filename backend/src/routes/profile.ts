@@ -9,7 +9,9 @@ const patchProfileSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD format').optional(),
   gender: z.enum(['M', 'F', 'Other']).optional(),
+  phone: z.string().max(20).optional(),
 })
+
 
 // GET /api/profile — get current user's patient profile
 router.get('/', requireAuth, async (req: AuthRequest, res) => {
@@ -17,7 +19,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
     const userId = req.user!.id
 
     const result = await query(
-      `SELECT p.id, p.name, p.date_of_birth, p.gender, u.email, u.role
+      `SELECT p.id, p.name, p.date_of_birth, p.gender, p.phone, u.email, u.role
        FROM patients p
        JOIN users u ON p.user_id = u.id
        WHERE p.user_id = $1`,
@@ -64,6 +66,10 @@ router.patch('/', requireAuth, async (req: AuthRequest, res) => {
       fields.push(`gender = $${idx++}`)
       values.push(parsed.gender)
     }
+    if (parsed.phone !== undefined) {
+      fields.push(`phone = $${idx++}`)
+      values.push(parsed.phone)
+    }
 
     if (fields.length === 0) {
       return res.status(400).json({ error: 'No fields to update' })
@@ -73,7 +79,7 @@ router.patch('/', requireAuth, async (req: AuthRequest, res) => {
     const result = await query(
       `UPDATE patients SET ${fields.join(', ')}
        WHERE user_id = $${idx}
-       RETURNING id, name, date_of_birth, gender`,
+       RETURNING id, name, date_of_birth, gender, phone`,
       values
     )
 
