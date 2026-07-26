@@ -41,33 +41,24 @@ function buildMessage(p: AlertPayload): string {
   ].join('\n')
 }
 
-export async function sendEmergencyAlert(payload: AlertPayload): Promise<void> {
-  if (!BOT_TOKEN || !CHAT_ID) {
-    // Not configured — skip silently (dev/test environment)
-    return
-  }
-
+export async function sendTelegramMessage(text: string): Promise<void> {
+  if (!BOT_TOKEN || !CHAT_ID) return
   const url  = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`
-  const body = JSON.stringify({
-    chat_id:    CHAT_ID,
-    text:       buildMessage(payload),
-    parse_mode: 'HTML',
-  })
-
   try {
     const res = await fetch(url, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body,
+      body:    JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: 'HTML' }),
     })
-    if (!res.ok) {
-      const err = await res.text()
-      console.error(`Telegram alert failed [${res.status}]:`, err)
-    } else {
-      console.log(`📣 Telegram alert sent for case ${payload.triageCaseId}`)
-    }
+    if (!res.ok) console.error(`Telegram failed [${res.status}]:`, await res.text())
   } catch (err) {
-    // Network failure — log and continue, never crash the save flow
-    console.error('Telegram alert network error:', err)
+    console.error('Telegram network error:', err)
   }
+}
+
+export async function sendEmergencyAlert(payload: AlertPayload): Promise<void> {
+  // Fire-and-forget — delegates to shared sendTelegramMessage
+  await sendTelegramMessage(buildMessage(payload))
+    .then(() => console.log(`📣 Telegram alert sent for case ${payload.triageCaseId}`))
+    .catch(err => console.error('Telegram alert error:', err))
 }

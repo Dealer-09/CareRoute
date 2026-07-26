@@ -1,10 +1,12 @@
-"use client"
+﻿"use client"
+import { BACKEND_URL } from '@/lib/api'
 
 import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Bell, Search, Settings, DatabaseZap, Loader2, ShieldAlert, Radio } from 'lucide-react'
+import { timeAgo } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,16 +53,6 @@ function age(dob: string | null) {
   return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25)) + ' yrs'
 }
 
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1)  return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24)  return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Clinician() {
@@ -103,7 +95,7 @@ export default function Clinician() {
     if (!token) { setError('Not authenticated'); setLoading(false); return }
 
     // 1. Load initial queue via REST
-    fetch('http://localhost:4000/api/triage/queue', {
+    fetch(`${BACKEND_URL}/api/triage/queue`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(res => {
@@ -120,7 +112,7 @@ export default function Clinician() {
 
     // 2. Subscribe to live updates via SSE
     const es = new EventSource(
-      `http://localhost:4000/api/triage/queue/stream?token=${token}`
+      `${BACKEND_URL}/api/triage/queue/stream?token=${token}`
     )
     sseRef.current = es
 
@@ -128,7 +120,7 @@ export default function Clinician() {
     es.addEventListener('new_case', (e: MessageEvent) => {
       try {
         // Re-fetch the full queue to get complete patient details
-        fetch('http://localhost:4000/api/triage/queue', {
+        fetch(`${BACKEND_URL}/api/triage/queue`, {
           headers: { Authorization: `Bearer ${token}` },
         })
           .then(r => r.json())
@@ -153,7 +145,7 @@ export default function Clinician() {
     if (!token) return
     setReviewingId(id)
     try {
-      const res = await fetch(`http://localhost:4000/api/triage/${id}/review`, {
+      const res = await fetch(`${BACKEND_URL}/api/triage/${id}/review`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -177,7 +169,7 @@ export default function Clinician() {
     if (!token) return
     setSavingNote(true)
     try {
-      const res = await fetch(`http://localhost:4000/api/triage/${id}/note`, {
+      const res = await fetch(`${BACKEND_URL}/api/triage/${id}/note`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ note: noteText }),

@@ -5,6 +5,7 @@ import { query } from '../db/connection'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { sendEmergencyAlert } from '../lib/telegram'
 import { addConnection, removeConnection, broadcast } from '../lib/sse'
+import { scheduleFollowUp } from '../lib/followup'
 
 const router = Router()
 
@@ -19,17 +20,19 @@ function verifyToken(token: string): { id: string; role: string } | null {
 
 // TriageResult schema based on our frontend type
 const triageCaseSchema = z.object({
-  severity: z.enum(['Green', 'Amber', 'Red']),
-  emergency: z.boolean(),
-  condition_guess: z.string(),
-  summary: z.string(),
-  reasoning: z.array(z.string()),
-  redFlags: z.array(z.string()),
+  severity:              z.enum(['Green', 'Amber', 'Red']),
+  emergency:             z.boolean(),
+  condition_guess:       z.string(),
+  summary:               z.string(),
+  reasoning:             z.array(z.string()),
+  redFlags:              z.array(z.string()),
   recommended_specialty: z.string(),
-  specialty_reason: z.string(),
-  advice: z.string(),
-  duration: z.string().optional(),
-  symptom_text: z.string().optional()
+  specialty_reason:      z.string(),
+  advice:                z.string(),
+  duration:              z.string().optional(),
+  symptom_text:          z.string().optional(),
+  for_dependent_id:      z.string().uuid().optional(),
+  for_name:              z.string().optional(),
 })
 
 // Protected route: Save a new triage case
@@ -54,23 +57,25 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
     // 2. Insert the triage case
     const insertResult = await query(
       `INSERT INTO triage_cases (
-        patient_id, severity, emergency, condition_guess, summary, 
-        reasoning, red_flags, recommended_specialty, specialty_reason, 
-        advice, duration, symptom_text
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+        patient_id, severity, emergency, condition_guess, summary,
+        reasoning, red_flags, recommended_specialty, specialty_reason,
+        advice, duration, symptom_text, for_dependent_id, for_name
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id`,
       [
         patientId,
         data.severity,
         data.emergency,
         data.condition_guess,
         data.summary,
-        JSON.stringify(data.reasoning),
-        JSON.stringify(data.redFlags),
+        data.reasoning,          // pg auto-serializes arrays to JSONB
+        data.redFlags,           // pg auto-serializes arrays to JSONB
         data.recommended_specialty,
         data.specialty_reason,
         data.advice,
         data.duration,
-        data.symptom_text
+        data.symptom_text,
+        data.for_dependent_id ?? null,
+        data.for_name ?? null,
       ]
     )
 
@@ -109,6 +114,11 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
       recommended_specialty: data.recommended_specialty,
       created_at:            new Date().toISOString(),
     })
+
+    // 6. Schedule 24h follow-up for Red and Amber cases
+    if (data.severity === 'Red' || data.severity === 'Amber') {
+      scheduleFollowUp(triageCaseId, patientId)
+    }
 
     res.json({ success: true, triageCaseId })
   } catch (err) {

@@ -9,6 +9,9 @@ import profileRoutes from './routes/profile'
 import documentRoutes from './routes/documents'
 import mapsRoutes from './routes/maps'
 import appointmentRoutes from './routes/appointments'
+import adminRoutes from './routes/admin'
+import dependentRoutes from './routes/dependents'
+import { startFollowUpScheduler } from './lib/followup'
 
 dotenv.config({ path: '../.env.local' })
 
@@ -28,6 +31,8 @@ app.use('/api/documents', documentRoutes)
 app.use('/api/maps', mapsRoutes)
 app.use('/api/doctors', appointmentRoutes)      // GET /api/doctors, GET /api/doctors/:id/slots
 app.use('/api/appointments', appointmentRoutes)  // GET|POST|PATCH /api/appointments
+app.use('/api/admin', adminRoutes)
+app.use('/api/dependents', dependentRoutes)
 
 
 async function startServer() {
@@ -38,6 +43,7 @@ async function startServer() {
 
   app.listen(PORT, () => {
     console.log(`✅ Server is running on http://localhost:${PORT}`)
+    startFollowUpScheduler()
   })
 }
 

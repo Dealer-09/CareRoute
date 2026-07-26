@@ -1,4 +1,5 @@
-"use client"
+﻿"use client"
+import { BACKEND_URL } from '@/lib/api'
 
 import React, { useEffect, useState } from 'react'
 import { Calendar, Clock, Loader2, CheckCircle, X } from 'lucide-react'
@@ -43,7 +44,7 @@ export default function SlotPicker({ doctorId, doctorName, feeInr, triageCaseId,
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`http://localhost:4000/api/doctors/${doctorId}/slots`)
+        const res = await fetch(`${BACKEND_URL}/api/doctors/${doctorId}/slots`)
         if (!res.ok) throw new Error()
         const data = await res.json()
         setSlots(data.slots)
@@ -57,11 +58,12 @@ export default function SlotPicker({ doctorId, doctorName, feeInr, triageCaseId,
   }, [doctorId])
 
   async function confirmBooking() {
-    if (!selected || !token) return
+    if (!selected) return
+    if (!token) { setError('Please sign in to book an appointment.'); return }
     setBooking(true)
     setError('')
     try {
-      const res = await fetch('http://localhost:4000/api/appointments', {
+      const res = await fetch(`${BACKEND_URL}/api/appointments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({

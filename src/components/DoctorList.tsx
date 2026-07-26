@@ -1,4 +1,5 @@
 "use client"
+import { BACKEND_URL } from '@/lib/api'
 
 import React, { useEffect, useState } from 'react'
 import { Star, MapPin, Phone, Briefcase, Loader2, CalendarDays } from 'lucide-react'
@@ -32,7 +33,7 @@ export default function DoctorList({ specialty, triageCaseId }: Props) {
     async function load() {
       try {
         const res = await fetch(
-          `http://localhost:4000/api/doctors${specialty ? `?specialty=${encodeURIComponent(specialty)}` : ''}`
+          `${BACKEND_URL}/api/doctors${specialty ? `?specialty=${encodeURIComponent(specialty)}` : ''}`
         )
         if (!res.ok) throw new Error()
         const data = await res.json()
@@ -45,7 +46,7 @@ export default function DoctorList({ specialty, triageCaseId }: Props) {
     }
 
     async function fallbackGeneralMedicine() {
-      const res = await fetch('http://localhost:4000/api/doctors?specialty=General Medicine')
+      const res = await fetch(`${BACKEND_URL}/api/doctors?specialty=General Medicine`)
       if (!res.ok) return []
       const data = await res.json()
       return data.doctors

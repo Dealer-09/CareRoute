@@ -1,4 +1,5 @@
 "use client"
+import { BACKEND_URL } from '@/lib/api'
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -88,7 +89,7 @@ export default function Dashboard() {
 
       if (token) {
         try {
-          const res = await fetch('http://localhost:4000/api/triage/history', {
+          const res = await fetch(`${BACKEND_URL}/api/triage/history`, {
             headers: { 'Authorization': `Bearer ${token}` }
           })
           if (res.ok) {

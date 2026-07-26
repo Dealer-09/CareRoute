@@ -108,16 +108,16 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
     }
     const patientId = patientRes.rows[0].id
 
-    // 2. Lock + verify slot is still free (FOR UPDATE prevents race conditions)
+    // 2. Lock + verify slot — BEGIN first so FOR UPDATE lock is held inside the transaction
+    await query('BEGIN', [])
     const slotRes = await query(
       'SELECT id, is_booked, starts_at FROM doctor_slots WHERE id = $1 AND doctor_id = $2 FOR UPDATE',
       [body.slot_id, body.doctor_id]
     )
-    if (slotRes.rows.length === 0) return res.status(404).json({ error: 'Slot not found' })
-    if (slotRes.rows[0].is_booked)  return res.status(409).json({ error: 'Slot already booked. Please choose another.' })
+    if (slotRes.rows.length === 0) { await query('ROLLBACK', []); return res.status(404).json({ error: 'Slot not found' }) }
+    if (slotRes.rows[0].is_booked)  { await query('ROLLBACK', []); return res.status(409).json({ error: 'Slot already booked. Please choose another.' }) }
 
-    // 3. Create appointment + mark slot booked in a transaction
-    await query('BEGIN', [])
+    // 3. Create appointment + mark slot booked
     try {
       const apptRes = await query(
         `INSERT INTO appointments (patient_id, doctor_id, slot_id, triage_case_id, notes)

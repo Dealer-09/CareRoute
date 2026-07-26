@@ -1,4 +1,5 @@
-"use client"
+﻿"use client"
+import { BACKEND_URL } from '@/lib/api'
 
 import React, { useEffect, useRef, useState } from 'react'
 import {
@@ -49,7 +50,7 @@ export default function DocumentManager() {
 
   async function fetchDocs() {
     try {
-      const res = await fetch('http://localhost:4000/api/documents', {
+      const res = await fetch(`${BACKEND_URL}/api/documents`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) throw new Error()
@@ -72,7 +73,7 @@ export default function DocumentManager() {
     form.append('file', file)
 
     try {
-      const res = await fetch('http://localhost:4000/api/documents/upload', {
+      const res = await fetch(`${BACKEND_URL}/api/documents/upload`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: form,
@@ -96,7 +97,7 @@ export default function DocumentManager() {
     if (!token) return
     setDeletingId(id)
     try {
-      const res = await fetch(`http://localhost:4000/api/documents/${id}`, {
+      const res = await fetch(`${BACKEND_URL}/api/documents/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })

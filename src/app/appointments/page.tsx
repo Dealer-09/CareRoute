@@ -1,4 +1,5 @@
 "use client"
+import { BACKEND_URL } from '@/lib/api'
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -48,7 +49,7 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     if (!token) { setLoading(false); return }
-    fetch('http://localhost:4000/api/appointments', {
+    fetch(`${BACKEND_URL}/api/appointments`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
@@ -61,7 +62,7 @@ export default function AppointmentsPage() {
     if (!token) return
     setCancellingId(id)
     try {
-      const res = await fetch(`http://localhost:4000/api/appointments/${id}/cancel`, {
+      const res = await fetch(`${BACKEND_URL}/api/appointments/${id}/cancel`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
       })

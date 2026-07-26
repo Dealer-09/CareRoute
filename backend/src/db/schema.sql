@@ -108,29 +108,55 @@ CREATE TABLE IF NOT EXISTS appointments (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ─── Migrations — run BEFORE indexes so columns exist when indexed ─────────────
+-- ─── dependents ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS dependents (
+  id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name          TEXT        NOT NULL,
+  date_of_birth DATE,
+  gender        TEXT        CHECK (gender IN ('M', 'F', 'Other')),
+  relationship  TEXT        NOT NULL DEFAULT 'Child'
+                            CHECK (relationship IN ('Child', 'Parent', 'Spouse', 'Sibling', 'Other')),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ─── follow_ups ────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS follow_ups (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  triage_case_id  UUID        NOT NULL REFERENCES triage_cases(id) ON DELETE CASCADE,
+  patient_id      UUID        NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  due_at          TIMESTAMPTZ NOT NULL,
+  sent            BOOLEAN     NOT NULL DEFAULT FALSE,
+  sent_at         TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 DO $$ BEGIN
-  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed       BOOLEAN     NOT NULL DEFAULT FALSE;
-  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed_by    UUID        REFERENCES users(id) ON DELETE SET NULL;
-  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed_at    TIMESTAMPTZ;
-  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS clinician_note TEXT;
-  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS bio            TEXT;
-  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS experience_yrs INT;
-  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS fee_inr        INT;
-  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS rating         NUMERIC(3,1);
+  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed          BOOLEAN     NOT NULL DEFAULT FALSE;
+  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed_by       UUID        REFERENCES users(id) ON DELETE SET NULL;
+  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed_at       TIMESTAMPTZ;
+  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS clinician_note    TEXT;
+  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS for_dependent_id  UUID        REFERENCES dependents(id) ON DELETE SET NULL;
+  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS for_name          TEXT;
+  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS bio               TEXT;
+  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS experience_yrs    INT;
+  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS fee_inr           INT;
+  ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS rating            NUMERIC(3,1);
 END $$;
 
 -- ─── Indexes — after migrations so all columns exist ──────────────────────────
-CREATE INDEX IF NOT EXISTS idx_patients_user_id          ON patients(user_id);
-CREATE INDEX IF NOT EXISTS idx_triage_cases_patient_id   ON triage_cases(patient_id);
-CREATE INDEX IF NOT EXISTS idx_triage_cases_severity     ON triage_cases(severity);
-CREATE INDEX IF NOT EXISTS idx_triage_cases_created_at   ON triage_cases(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_triage_cases_reviewed     ON triage_cases(reviewed);
-CREATE INDEX IF NOT EXISTS idx_audit_log_user_id         ON audit_log(user_id);
-CREATE INDEX IF NOT EXISTS idx_audit_log_action          ON audit_log(action);
-CREATE INDEX IF NOT EXISTS idx_doctor_slots_doctor_id    ON doctor_slots(doctor_id);
-CREATE INDEX IF NOT EXISTS idx_doctor_slots_starts_at    ON doctor_slots(starts_at);
-CREATE INDEX IF NOT EXISTS idx_doctor_slots_is_booked    ON doctor_slots(is_booked);
-CREATE INDEX IF NOT EXISTS idx_appointments_patient_id   ON appointments(patient_id);
-CREATE INDEX IF NOT EXISTS idx_appointments_doctor_id    ON appointments(doctor_id);
-CREATE INDEX IF NOT EXISTS idx_appointments_status       ON appointments(status);
+CREATE INDEX IF NOT EXISTS idx_patients_user_id            ON patients(user_id);
+CREATE INDEX IF NOT EXISTS idx_triage_cases_patient_id     ON triage_cases(patient_id);
+CREATE INDEX IF NOT EXISTS idx_triage_cases_severity       ON triage_cases(severity);
+CREATE INDEX IF NOT EXISTS idx_triage_cases_created_at     ON triage_cases(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_triage_cases_reviewed       ON triage_cases(reviewed);
+CREATE INDEX IF NOT EXISTS idx_audit_log_user_id           ON audit_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action            ON audit_log(action);
+CREATE INDEX IF NOT EXISTS idx_doctor_slots_doctor_id      ON doctor_slots(doctor_id);
+CREATE INDEX IF NOT EXISTS idx_doctor_slots_starts_at      ON doctor_slots(starts_at);
+CREATE INDEX IF NOT EXISTS idx_doctor_slots_is_booked      ON doctor_slots(is_booked);
+CREATE INDEX IF NOT EXISTS idx_appointments_patient_id     ON appointments(patient_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_doctor_id      ON appointments(doctor_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_status         ON appointments(status);
+CREATE INDEX IF NOT EXISTS idx_dependents_user_id          ON dependents(user_id);
+CREATE INDEX IF NOT EXISTS idx_follow_ups_due_at           ON follow_ups(due_at) WHERE sent = FALSE;

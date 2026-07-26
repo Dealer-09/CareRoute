@@ -1,4 +1,5 @@
 "use client"
+import { BACKEND_URL } from '@/lib/api'
 
 import React, { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
@@ -49,7 +50,7 @@ export default function NearestER() {
 
         try {
           const res = await fetch(
-            `http://localhost:4000/api/maps/nearest-er?lat=${userCoords.lat}&lng=${userCoords.lng}`
+            `${BACKEND_URL}/api/maps/nearest-er?lat=${userCoords.lat}&lng=${userCoords.lng}`
           )
           if (!res.ok) throw new Error()
           const data = await res.json()

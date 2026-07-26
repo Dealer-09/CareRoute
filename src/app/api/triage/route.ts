@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, SchemaType, type Schema } from '@google/generative-ai'
+﻿import { GoogleGenerativeAI, SchemaType, type Schema } from '@google/generative-ai'
 import { NextRequest, NextResponse } from 'next/server'
 import { emergencyPreCheck } from '@/lib/emergency'
 import { matchSpecialty } from '@/lib/specialty'
@@ -185,6 +185,23 @@ export async function POST(req: NextRequest) {
     const vitalsSection = vitalsLines.length > 0
       ? `\nVitals provided by patient:\n${vitalsLines.map(l => `• ${l}`).join('\n')}`
       : ''
+    const dependent = body.dependent ?? null
+
+    // Build optional demographics section for the AI prompt (caregiver triage)
+    let demographicsSection = ''
+    if (dependent) {
+      const age = dependent.date_of_birth
+        ? Math.floor((Date.now() - new Date(dependent.date_of_birth).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
+        : null
+      const genderMap: Record<string, string> = { M: 'Male', F: 'Female', Other: 'Other' }
+      const parts: string[] = [
+        `Patient Name: ${dependent.name}`,
+        ...(age !== null ? [`Age: ${age} years`] : []),
+        ...(dependent.gender ? [`Gender: ${genderMap[dependent.gender] ?? dependent.gender}`] : []),
+        `Relationship to reporter: ${dependent.relationship}`,
+      ]
+      demographicsSection = `\nPatient Demographics (reported by caregiver):\n${parts.map(p => `• ${p}`).join('\n')}\nNote: Adjust advice appropriately for the patient's age.`
+    }
 
     if (!text || text.trim().length < 15) {
       return NextResponse.json(
@@ -233,7 +250,7 @@ export async function POST(req: NextRequest) {
 
 Description: "${text.trim()}"
 Duration: ${duration}
-Critical flags checked by patient: ${flags.length > 0 ? flags.join(', ') : 'None'}${vitalsSection}
+Critical flags checked by patient: ${flags.length > 0 ? flags.join(', ') : 'None'}${vitalsSection}${demographicsSection}
 
 Apply the severity rules strictly. Provide your triage assessment.`
 

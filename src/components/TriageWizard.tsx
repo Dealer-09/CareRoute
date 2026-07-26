@@ -1,4 +1,5 @@
-"use client"
+﻿"use client"
+import { BACKEND_URL } from '@/lib/api'
 
 import React, { useState, useEffect, useRef } from 'react'
 import type { TriageResult } from '@/types/triage'
@@ -20,8 +21,18 @@ import {
   ShieldCheck,
   BookOpen,
   Loader2,
+  Users,
 } from 'lucide-react'
 
+
+// ─── Dependent type ───────────────────────────────────────────────────────────
+type Dependent = {
+  id: string
+  name: string
+  date_of_birth: string | null
+  gender: 'M' | 'F' | 'Other' | null
+  relationship: string
+}
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DISCLAIMER =
@@ -100,6 +111,20 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
   const [temperature, setTemperature] = useState('')
   const [bloodPressure, setBloodPressure] = useState('')
 
+
+  // Dependent profiles
+  const [dependents,   setDependents]  = useState<Dependent[]>([])
+  const [selectedFor,  setSelectedFor] = useState<'self' | Dependent>('self')
+
+  // Fetch dependents on mount
+  useEffect(() => {
+    const token = localStorage.getItem('careRouteToken')
+    if (!token) return
+    fetch(`${BACKEND_URL}/api/dependents`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => { if (d.dependents) setDependents(d.dependents) })
+      .catch(() => {})
+  }, [])
   // ─── Voice-to-text ─────────────────────────────────────────────────────────
   function toggleVoice() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -213,7 +238,7 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
         const token = localStorage.getItem('careRouteToken')
         if (token) {
           try {
-            await fetch('http://localhost:4000/api/triage/save', {
+            await fetch(`${BACKEND_URL}/api/triage/save`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -221,8 +246,11 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
               },
               body: JSON.stringify({
                 ...withMeta,
-                symptom_text: text
+                symptom_text:     text,
+                for_dependent_id: selectedFor !== 'self' ? selectedFor.id   : undefined,
+                for_name:         selectedFor !== 'self' ? selectedFor.name  : undefined,
               })
+
             })
           } catch (e) {
             console.error('Failed to save to DB, but local analysis completed', e)
@@ -319,6 +347,46 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
                 Tell us what you&apos;re experiencing in your own words
               </p>
             </div>
+
+            {/* For whom? — only shown if the user has dependents */}
+            {dependents.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Users size={13} className="text-slate-400" />
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Who is this for?</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setSelectedFor('self')}
+                    className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-all ${
+                      selectedFor === 'self'
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
+                    }`}
+                  >
+                    Myself
+                  </button>
+                  {dependents.map(dep => (
+                    <button
+                      key={dep.id}
+                      onClick={() => setSelectedFor(dep)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-all ${
+                        typeof selectedFor !== 'string' && selectedFor.id === dep.id
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
+                      }`}
+                    >
+                      {dep.name} <span className="opacity-60 font-normal">({dep.relationship})</span>
+                    </button>
+                  ))}
+                </div>
+                {selectedFor !== 'self' && (
+                  <p className="text-xs text-blue-600 mt-1.5 font-medium">
+                    ✓ AI will tailor its advice for {selectedFor.name}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <div className="relative">

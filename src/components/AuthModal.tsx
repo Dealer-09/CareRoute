@@ -1,4 +1,5 @@
 "use client"
+import { BACKEND_URL } from '@/lib/api'
 
 import React, { useState } from 'react'
 import { Button } from './ui/button'
@@ -51,10 +52,10 @@ export default function AuthModal({
     const endpoint = mode === 'signin' ? '/api/auth/signin' : '/api/auth/signup'
     
     try {
-      const res = await fetch(`http://localhost:4000${endpoint}`, {
+      const res = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, role: userType })
+        body: JSON.stringify({ email, password, role: userType === 'provider' ? 'doctor' : 'patient' })
       })
 
       const data = await res.json()

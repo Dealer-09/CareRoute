@@ -23,6 +23,8 @@ export function removeConnection(id: string): void {
 export function broadcast(event: string, data: unknown): void {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
   for (const [id, res] of connections) {
+    // Evict already-destroyed sockets before attempting write
+    if (res.destroyed || res.writableEnded) { connections.delete(id); continue }
     try {
       res.write(payload)
     } catch {
@@ -35,3 +37,11 @@ export function broadcast(event: string, data: unknown): void {
 export function connectionCount(): number {
   return connections.size
 }
+
+// Heartbeat: ping every 30s to detect and evict stale connections
+setInterval(() => {
+  for (const [id, res] of connections) {
+    if (res.destroyed || res.writableEnded) { connections.delete(id); continue }
+    try { res.write(': heartbeat\n\n') } catch { connections.delete(id) }
+  }
+}, 30_000)
