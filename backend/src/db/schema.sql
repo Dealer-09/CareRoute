@@ -104,13 +104,17 @@ CREATE TABLE IF NOT EXISTS appointments (
   id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   patient_id      UUID        NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
   doctor_id       UUID        NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
-  slot_id         UUID        NOT NULL UNIQUE REFERENCES doctor_slots(id) ON DELETE CASCADE,
+  slot_id         UUID        NOT NULL REFERENCES doctor_slots(id) ON DELETE CASCADE,
   triage_case_id  UUID        REFERENCES triage_cases(id) ON DELETE SET NULL,
   status          TEXT        NOT NULL DEFAULT 'confirmed'
                               CHECK (status IN ('confirmed', 'cancelled', 'completed')),
   notes           TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Only one active (non-cancelled) appointment per slot at a time
+CREATE UNIQUE INDEX IF NOT EXISTS idx_appointments_slot_active
+  ON appointments (slot_id)
+  WHERE status != 'cancelled';
 
 -- ─── dependents ──────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS dependents (
@@ -146,6 +150,11 @@ DO $$ BEGIN
   ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS confidence        INT;
   BEGIN
     ALTER TABLE follow_ups ADD CONSTRAINT follow_ups_triage_case_id_key UNIQUE (triage_case_id);
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+  -- Drop the overly strict UNIQUE constraint on slot_id if it exists (replaced by partial index)
+  BEGIN
+    ALTER TABLE appointments DROP CONSTRAINT IF EXISTS appointments_slot_id_key;
   EXCEPTION WHEN OTHERS THEN NULL;
   END;
   ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS bio               TEXT;

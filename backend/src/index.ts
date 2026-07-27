@@ -8,7 +8,7 @@ import triageRoutes from './routes/triage'
 import profileRoutes from './routes/profile'
 import documentRoutes from './routes/documents'
 import mapsRoutes from './routes/maps'
-import appointmentRoutes from './routes/appointments'
+import { doctorRouter, appointmentRouter } from './routes/appointments'
 import adminRoutes from './routes/admin'
 import dependentRoutes from './routes/dependents'
 import { startFollowUpScheduler } from './lib/followup'
@@ -29,8 +29,8 @@ app.use('/api/triage', triageRoutes)
 app.use('/api/profile', profileRoutes)
 app.use('/api/documents', documentRoutes)
 app.use('/api/maps', mapsRoutes)
-app.use('/api/doctors', appointmentRoutes)      // GET /api/doctors, GET /api/doctors/:id/slots
-app.use('/api/appointments', appointmentRoutes)  // GET|POST|PATCH /api/appointments
+app.use('/api/doctors', doctorRouter)
+app.use('/api/appointments', appointmentRouter)
 app.use('/api/admin', adminRoutes)
 app.use('/api/dependents', dependentRoutes)
 

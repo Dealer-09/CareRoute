@@ -105,7 +105,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
 
     // Generate short-lived signed URLs for each file (1 hour)
     const docs = await Promise.all(
-      result.rows.map(async (row) => {
+      result.rows.map(async (row: any) => {
         const { data } = await supabase.storage
           .from(BUCKET)
           .createSignedUrl(row.storage_path, 3600)

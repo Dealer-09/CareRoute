@@ -68,8 +68,8 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
         data.emergency,
         data.condition_guess,
         data.summary,
-        data.reasoning,          // pg auto-serializes arrays to JSONB
-        data.redFlags,           // pg auto-serializes arrays to JSONB
+        JSON.stringify(data.reasoning),   // must stringify for JSONB columns
+        JSON.stringify(data.redFlags),    // must stringify for JSONB columns
         data.recommended_specialty,
         data.specialty_reason,
         data.advice,

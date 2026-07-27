@@ -53,9 +53,10 @@ graph TB
     end
 
     A -->|JWT| I
-    B -->|POST /api/triage Next.js route| B
-    B -->|Gemini call + pre-check| T
-    T -->|JSON triage result| B
+    B -->|POST /api/triage — Gemini proxy| NX
+    NX -->|Emergency pre-check + Gemini call| T
+    T -->|JSON triage result| NX
+    NX -->|Triage result| B
     B -->|POST /api/triage/save result| J
     J -->|Red/Emergency| V
     J -->|SSE broadcast| F
@@ -174,8 +175,8 @@ Red or Emergency triage result
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | Next.js 16 (App Router), Vanilla CSS, Turbopack |
-| **Backend** | Express 4, TypeScript, Bun runtime |
+| **Frontend** | Next.js 16 (App Router), Vanilla CSS |
+| **Backend** | Express 4, TypeScript, nodemon + ts-node (dev) |
 | **Database** | Supabase (PostgreSQL) |
 | **Auth** | JWT (bcrypt, 7-day tokens) |
 | **AI — Triage** | Gemini 2.5 Flash — strict JSON schema output |
@@ -241,7 +242,9 @@ erDiagram
         TEXT severity
         BOOL emergency
         TEXT condition_guess
+        TEXT summary
         TEXT recommended_specialty
+        TEXT specialty_reason
         TEXT advice
         JSONB reasoning
         JSONB red_flags
@@ -348,7 +351,7 @@ erDiagram
 ### Admin
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| GET | `/api/admin/stats` | ✅ admin | Case counts by severity, active users |
+| GET | `/api/admin/stats` | ✅ admin | Case counts by severity, total registered users |
 | GET | `/api/admin/triage/recent` | ✅ admin | Recent triage cases |
 | GET | `/api/admin/users` | ✅ admin | User list with search |
 | PATCH | `/api/admin/users/:id/role` | ✅ admin | Change user role |
@@ -415,8 +418,8 @@ TELEGRAM_CHAT_ID=your-chat-id
 ```
 
 ```bash
-# 4. Run schema migrations + seed doctors and slots
-cd backend && bun run src/db/migrate.ts && cd ..
+# 4. Run schema migrations then seed doctors and slots
+cd backend && node_modules/.bin/ts-node src/db/migrate.ts && node_modules/.bin/ts-node src/scripts/seed.ts && cd ..
 
 # 5. Start both servers (two terminals)
 bun run dev                  # Frontend → http://localhost:3000
@@ -447,7 +450,7 @@ CareRoute/
 │   │   ├── SlotPicker.tsx             # Appointment slot modal
 │   │   ├── NearestER.tsx             # ER locator shell + list
 │   │   ├── ERMap.tsx                  # Leaflet map (dynamic import, SSR-disabled)
-│   │   ├── DocumentManager.tsx        # Upload/extract/delete documents
+│   │   ├── DocumentManager.tsx        # Upload/list/delete documents
 │   │   └── AuthModal.tsx              # Sign up / Sign in
 │   └── lib/
 │       ├── api.ts                     # Centralised BACKEND_URL
@@ -474,9 +477,21 @@ CareRoute/
         │   ├── followup.ts            # 24h follow-up scheduler (hourly setInterval)
         │   └── sse.ts                 # SSE connection pool + heartbeat
         └── db/
-            ├── connection.ts          # pg Pool
+            ├── connection.ts          # pg Pool + transaction() helper
             ├── schema.sql             # Full idempotent schema (all tables)
             └── migrate.ts             # Migration runner
+│
+└── tests/                             # Integration test suite
+    ├── runner.ts                      # Test runner entry point
+    └── suites/
+        ├── health.ts
+        ├── auth.ts
+        ├── profile.ts
+        ├── dependents.ts
+        ├── triage.ts
+        ├── appointments.ts
+        ├── admin.ts
+        └── security.ts
 ```
 
 ---

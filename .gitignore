@@ -45,3 +45,6 @@ next-env.d.ts
 
 # one-off scripts (seed, migrations runner) — local only
 backend/src/scripts/
+/tests
+future_roadmap.md
+plan.md
