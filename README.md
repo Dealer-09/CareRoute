@@ -53,14 +53,15 @@ graph TB
     end
 
     A -->|JWT| I
-    B -->|POST /api/triage/save| J
-    J -->|Symptom text| T
-    T -->|JSON triage result| J
+    B -->|POST /api/triage Next.js route| B
+    B -->|Gemini call + pre-check| T
+    T -->|JSON triage result| B
+    B -->|POST /api/triage/save result| J
     J -->|Red/Emergency| V
     J -->|SSE broadcast| F
     B -->|GET /api/maps/nearest-er| M
     M -->|Overpass QL query| U
-    B -->|PubMed citations| W
+    B -->|PubMed citations client-side| W
     C -->|GET /api/documents| L
     L -->|Upload/Download| S
     D -->|GET /api/doctors| N
@@ -77,27 +78,30 @@ graph TB
 ```mermaid
 sequenceDiagram
     participant P as Patient
-    participant FE as Frontend
-    participant BE as Backend
+    participant FE as "Frontend (Next.js)"
+    participant NX as "Next.js /api/triage"
+    participant BE as "Express Backend"
     participant GEM as Gemini 2.5 Flash
     participant TG as Telegram
     participant PM as PubMed
 
     P->>FE: Describes symptoms (voice or text, Hindi/English)
-    FE->>BE: POST /api/triage/save {symptom_text, vitals, for_dependent_id?}
-    BE->>BE: Emergency pre-check (deterministic)
+    FE->>NX: POST /api/triage {text, vitals, flags, dependent?}
+    NX->>NX: Emergency pre-check (deterministic, before LLM)
     alt Emergency detected pre-LLM
-        BE-->>FE: {severity: Red, emergency: true}
-        BE->>TG: sendEmergencyAlert() [non-blocking]
+        NX-->>FE: {severity: Red, emergency: true}
     else Not emergency
-        BE->>GEM: Prompt with Indic idiom context + demographic section
-        GEM-->>BE: {severity, condition_guess, specialty, advice, reasoning, red_flags, confidence}
-        alt Red or Amber from LLM
-            BE->>TG: sendEmergencyAlert() [non-blocking]
-            BE->>BE: scheduleFollowUp() → follow_ups table
-        end
-        BE-->>FE: Full triage result
+        NX->>GEM: Prompt with Indic idiom context + demographic section
+        GEM-->>NX: {severity, condition_guess, specialty, advice, reasoning, red_flags, confidence}
+        NX-->>FE: Full triage result
     end
+    FE->>BE: POST /api/triage/save {result, symptom_text, for_dependent_id?}
+    BE->>BE: Persist to triage_cases
+    alt Red or Amber
+        BE->>TG: sendEmergencyAlert() [non-blocking]
+        BE->>BE: scheduleFollowUp() → follow_ups table
+    end
+    BE->>FE: SSE broadcast to clinician queue
     FE->>PM: Fetch 3 PubMed citations for condition [client-side]
     FE->>P: Result + reasoning + citations + specialist cards + ER map (if Red)
 ```
@@ -121,10 +125,10 @@ sequenceDiagram
 
 /dashboard
   ├── Assessment history (filterable, from DB)
-  └── Document uploads (PDF/JPEG/PNG → Supabase Storage + Gemini extraction)
+  └── Document uploads (PDF/JPEG/PNG → Supabase Storage)
 
 /timeline
-  └── Symptom progression chart across all past cases
+  └── Symptom progression timeline — vertical list of past cases with severity indicators
 
 /appointments
   ├── Upcoming appointments (with cancel)
@@ -149,7 +153,7 @@ Sign in (role: doctor)
 ```
 Sign in (role: admin)
   └── /admin
-        ├── Stats — total cases, red/amber/green breakdown, active users
+        ├── Stats — total cases, red/amber/green breakdown, total registered users
         ├── User management — list, change role, delete
         └── Audit log — all profile changes, role updates, deletions
 ```
@@ -175,14 +179,14 @@ Red or Emergency triage result
 | **Database** | Supabase (PostgreSQL) |
 | **Auth** | JWT (bcrypt, 7-day tokens) |
 | **AI — Triage** | Gemini 2.5 Flash — strict JSON schema output |
-| **AI — Documents** | Gemini 2.0 Flash — structured field extraction from PDFs/images |
+| **AI — Documents** | Gemini 2.5 Flash — triage only; document extraction not implemented |
 | **Storage** | Supabase Storage (documents) |
 | **Maps** | Leaflet + react-leaflet, OpenStreetMap tiles, Overpass API |
 | **Alerts** | Telegram Bot API (native fetch, non-blocking) |
 | **Real-time** | Server-Sent Events (SSE) — clinician queue push |
 | **Citations** | PubMed E-utilities API (free, no key required) |
 | **Voice** | Web Speech API — `en-IN` locale (Hindi + English) |
-| **Runtime** | Bun (entire project — frontend + backend) |
+| **Runtime** | Bun (frontend script runner + Next.js); backend dev uses nodemon + ts-node |
 
 ---
 
@@ -208,7 +212,7 @@ erDiagram
     }
     dependents {
         UUID id PK
-        UUID patient_id FK
+        UUID user_id FK
         TEXT name
         DATE date_of_birth
         TEXT gender
@@ -290,7 +294,7 @@ erDiagram
 
     users ||--o{ patients : "has"
     users ||--o{ doctors : "may link"
-    patients ||--o{ dependents : "manages"
+    users ||--o{ dependents : "manages"
     patients ||--o{ triage_cases : "submits"
     dependents ||--o{ triage_cases : "triaged via"
     patients ||--o{ documents : "uploads"
@@ -320,6 +324,7 @@ erDiagram
 | PATCH | `/api/profile` | ✅ | Update profile fields |
 | GET | `/api/dependents` | ✅ | List dependents |
 | POST | `/api/dependents` | ✅ | Add dependent |
+| PATCH | `/api/dependents/:id` | ✅ | Update dependent |
 | DELETE | `/api/dependents/:id` | ✅ | Remove dependent |
 | POST | `/api/triage/save` | ✅ | Run AI triage + save result |
 | GET | `/api/triage/history` | ✅ | Patient's past triage cases |
@@ -490,7 +495,7 @@ CareRoute/
 | 3 | Clinician dashboard — queue, review, notes | ✅ |
 | 3 | SSE live clinician queue — push on new case, 30s heartbeat | ✅ |
 | 4 | Document upload → Supabase Storage, signed URLs | ✅ |
-| 4 | Document intelligence — Gemini 2.0 Flash field extraction from PDF/image | ✅ |
+| 4 | Document intelligence — Gemini field extraction from PDF/image | ❌ Not built (route deleted) |
 | 5 | Telegram emergency alerts (non-blocking) | ✅ |
 | 5 | 24-hour follow-up engine — Telegram check-in after Red/Amber cases | ✅ |
 | 6 | Nearest ER map — Leaflet + OpenStreetMap + Overpass API (free) | ✅ |
