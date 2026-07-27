@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { query } from '../db/connection'
 import { requireAuth, AuthRequest } from '../middleware/auth'
+import { supabase, BUCKET } from '../lib/supabase'
 
 const router = Router()
 
@@ -118,6 +119,20 @@ router.delete('/users/:id', requireAuth, requireAdmin, async (req: AuthRequest, 
     if (id === req.user!.id) {
       return res.status(400).json({ error: 'Cannot delete your own account' })
     }
+
+    // 1. Find and delete all Supabase Storage files belonging to this user
+    const docsResult = await query(
+      `SELECT d.storage_path FROM documents d
+       JOIN patients p ON d.patient_id = p.id
+       WHERE p.user_id = $1 AND d.storage_path IS NOT NULL`,
+      [id]
+    )
+    if (docsResult.rows.length > 0) {
+      const paths = docsResult.rows.map((r: any) => r.storage_path)
+      await supabase.storage.from(BUCKET).remove(paths)
+    }
+
+    // 2. Delete user — CASCADE removes patients, triage_cases, documents, appointments, dependents
     await query('DELETE FROM users WHERE id = $1', [id])
     await query(
       'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',

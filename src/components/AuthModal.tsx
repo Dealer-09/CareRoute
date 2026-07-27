@@ -25,6 +25,7 @@ export default function AuthModal({
   const [userType, setUserType] = useState<UserType>(initialUserType)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -38,6 +39,10 @@ export default function AuthModal({
     }
     if (password.length < 6) {
       setError('Password must be at least 6 characters.')
+      return false
+    }
+    if (mode === 'signup' && !name.trim()) {
+      setError('Please enter your full name.')
       return false
     }
     return true
@@ -55,7 +60,12 @@ export default function AuthModal({
       const res = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, role: userType === 'provider' ? 'doctor' : 'patient' })
+        body: JSON.stringify({
+          email,
+          password,
+          role: userType === 'provider' ? 'doctor' : 'patient',
+          name: mode === 'signup' ? name.trim() : undefined,
+        })
       })
 
       const data = await res.json()
@@ -164,6 +174,31 @@ export default function AuthModal({
 
         {/* Form */}
         <div className="space-y-4" onKeyDown={handleKeyDown}>
+
+          {/* Name — signup only */}
+          {mode === 'signup' && (
+            <div>
+              <label className="block text-sm font-semibold text-slate-800 mb-1.5">
+                Full Name
+              </label>
+              <div className="relative">
+                <User
+                  size={18}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  id="auth-name"
+                  type="text"
+                  value={name}
+                  onChange={e => { setName(e.target.value); setError(null) }}
+                  placeholder="Your full name"
+                  autoComplete="name"
+                  className="w-full h-12 pl-10 pr-4 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-sm"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Email */}
           <div>
             <label className="block text-sm font-semibold text-slate-800 mb-1.5">
@@ -233,8 +268,6 @@ export default function AuthModal({
             )}
           </Button>
         </div>
-
-
 
         {/* Toggle mode */}
         <div className="text-center mt-6">

@@ -147,7 +147,7 @@ router.get('/history', requireAuth, async (req: AuthRequest, res) => {
     )
 
     // Map DB columns to our frontend TriageResult type
-    const history = historyResult.rows.map(row => ({
+    const history = historyResult.rows.map((row: any) => ({
       id: row.id,
       severity: row.severity,
       emergency: row.emergency,
@@ -228,7 +228,7 @@ router.get('/queue', requireAuth, async (req: AuthRequest, res) => {
       []
     )
 
-    const queue = result.rows.map(row => ({
+    const queue = result.rows.map((row: any) => ({
       id: row.id,
       severity: row.severity,
       emergency: row.emergency,

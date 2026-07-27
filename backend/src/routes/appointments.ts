@@ -154,15 +154,10 @@ router.patch('/:id/cancel', requireAuth, async (req: AuthRequest, res) => {
 
     const slotId = apptRes.rows[0].slot_id
 
-    await query('BEGIN', [])
-    try {
-      await query("UPDATE appointments SET status = 'cancelled' WHERE id = $1", [id])
-      await query('UPDATE doctor_slots SET is_booked = FALSE WHERE id = $1', [slotId])
-      await query('COMMIT', [])
-    } catch (inner) {
-      await query('ROLLBACK', [])
-      throw inner
-    }
+    await transaction(async (client) => {
+      await client.query("UPDATE appointments SET status = 'cancelled' WHERE id = $1", [id])
+      await client.query('UPDATE doctor_slots SET is_booked = FALSE WHERE id = $1', [slotId])
+    })
 
     await query(
       'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
