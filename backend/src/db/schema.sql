@@ -144,7 +144,10 @@ DO $$ BEGIN
   ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS for_dependent_id  UUID        REFERENCES dependents(id) ON DELETE SET NULL;
   ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS for_name          TEXT;
   ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS confidence        INT;
-  ALTER TABLE follow_ups   ADD CONSTRAINT follow_ups_triage_case_id_key UNIQUE (triage_case_id);
+  BEGIN
+    ALTER TABLE follow_ups ADD CONSTRAINT follow_ups_triage_case_id_key UNIQUE (triage_case_id);
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
   ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS bio               TEXT;
   ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS experience_yrs    INT;
   ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS fee_inr           INT;

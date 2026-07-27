@@ -392,9 +392,8 @@ Fill in `.env.local`:
 DATABASE_URL=postgresql://postgres:PASSWORD@db.xxx.supabase.co:5432/postgres
 
 # Supabase Storage
-NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SECRET_KEY=your-service-role-key
 
 # AI
 GEMINI_API_KEY=your-gemini-key
@@ -521,9 +520,8 @@ CareRoute/
 | Variable | Required | Description |
 |---|---|---|
 | `DATABASE_URL` | ✅ | Supabase PostgreSQL connection string |
-| `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Supabase anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase service role (server-side only) |
+| `SUPABASE_URL` | ✅ | Supabase project URL |
+| `SUPABASE_SECRET_KEY` | ✅ | Supabase service role key (server-side only) |
 | `GEMINI_API_KEY` | ✅ | Google Gemini API key |
 | `JWT_SECRET` | ✅ | Secret for signing JWT tokens |
 | `NEXT_PUBLIC_BACKEND_URL` | ✅ | Backend URL (default: `http://localhost:4000`) |

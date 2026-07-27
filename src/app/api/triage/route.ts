@@ -1,4 +1,4 @@
-﻿import { GoogleGenerativeAI, SchemaType, type Schema } from '@google/generative-ai'
+import { GoogleGenerativeAI, SchemaType, type Schema } from '@google/generative-ai'
 import { NextRequest, NextResponse } from 'next/server'
 import { emergencyPreCheck } from '@/lib/emergency'
 import { matchSpecialty } from '@/lib/specialty'
@@ -285,7 +285,7 @@ Apply the severity rules strictly. Provide your triage assessment.`
 
     const result: TriageResult = {
       severity: parsed.severity,
-      emergency: false,
+      emergency: parsed.severity === 'Red',
       confidence: Math.min(100, Math.max(0, parsed.confidence ?? 75)),
       condition_guess: parsed.condition_guess,
       summary: parsed.summary,

@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 import { BACKEND_URL } from '@/lib/api'
 
 import React, { useState, useEffect, useRef } from 'react'
@@ -221,6 +221,7 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
               temperature:   temperature   || undefined,
               bloodPressure: bloodPressure || undefined,
             },
+            dependent: selectedFor !== 'self' ? selectedFor : undefined,
           }),
         })
 

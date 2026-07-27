@@ -14,4 +14,22 @@ export const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 })
 
-export const query = (text: string, params?: any[]) => pool.query(text, params)
+export const query = (text: string, params?: any[], client?: any) => {
+  if (client) return client.query(text, params)
+  return pool.query(text, params)
+}
+
+export const transaction = async <T>(callback: (client: any) => Promise<T>): Promise<T> => {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await callback(client)
+    await client.query('COMMIT')
+    return result
+  } catch (e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally {
+    client.release()
+  }
+}

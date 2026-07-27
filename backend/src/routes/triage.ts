@@ -148,6 +148,7 @@ router.get('/history', requireAuth, async (req: AuthRequest, res) => {
 
     // Map DB columns to our frontend TriageResult type
     const history = historyResult.rows.map(row => ({
+      id: row.id,
       severity: row.severity,
       emergency: row.emergency,
       condition_guess: row.condition_guess,
@@ -221,8 +222,8 @@ router.get('/queue', requireAuth, async (req: AuthRequest, res) => {
        FROM triage_cases t
        JOIN patients p ON t.patient_id = p.id
        ORDER BY
-         t.reviewed ASC,          -- unreviewed first
-         t.severity = 'Red' DESC, -- Red before Amber before Green
+         t.reviewed ASC,
+         CASE t.severity WHEN 'Red' THEN 1 WHEN 'Amber' THEN 2 ELSE 3 END ASC,
          t.created_at DESC`,
       []
     )

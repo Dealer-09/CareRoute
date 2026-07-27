@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { query } from '../db/connection'
+import { query, transaction } from '../db/connection'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 
 const router = Router()
@@ -66,37 +66,39 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
     const patientId = patientRes.rows[0].id
 
     // 2. Lock + verify slot — BEGIN first so FOR UPDATE lock is held inside the transaction
-    await query('BEGIN', [])
-    const slotRes = await query(
-      'SELECT id, is_booked, starts_at FROM doctor_slots WHERE id = $1 AND doctor_id = $2 FOR UPDATE',
-      [body.slot_id, body.doctor_id]
-    )
-    if (slotRes.rows.length === 0) { await query('ROLLBACK', []); return res.status(404).json({ error: 'Slot not found' }) }
-    if (slotRes.rows[0].is_booked)  { await query('ROLLBACK', []); return res.status(409).json({ error: 'Slot already booked. Please choose another.' }) }
+    const appt = await transaction(async (client) => {
+      const slotRes = await client.query(
+        'SELECT id, is_booked, starts_at FROM doctor_slots WHERE id = $1 AND doctor_id = $2 FOR UPDATE',
+        [body.slot_id, body.doctor_id]
+      )
+      if (slotRes.rows.length === 0) { throw new Error('Slot not found') }
+      if (slotRes.rows[0].is_booked) { throw new Error('Slot already booked. Please choose another.') }
 
-    // 3. Create appointment + mark slot booked
-    try {
-      const apptRes = await query(
+      // 3. Create appointment + mark slot booked
+      const apptRes = await client.query(
         `INSERT INTO appointments (patient_id, doctor_id, slot_id, triage_case_id, notes)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id, status, created_at`,
         [patientId, body.doctor_id, body.slot_id, body.triage_case_id ?? null, body.notes ?? null]
       )
-      await query('UPDATE doctor_slots SET is_booked = TRUE WHERE id = $1', [body.slot_id])
-      await query('COMMIT', [])
+      await client.query('UPDATE doctor_slots SET is_booked = TRUE WHERE id = $1', [body.slot_id])
+      
+      return { ...apptRes.rows[0], starts_at: slotRes.rows[0].starts_at }
+    })
 
-      await query(
-        'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
-        [userId, 'BOOK_APPOINTMENT', 'appointments', apptRes.rows[0].id]
-      )
+    await query(
+      'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
+      [userId, 'BOOK_APPOINTMENT', 'appointments', appt.id]
+    )
 
-      res.json({ success: true, appointment: { ...apptRes.rows[0], starts_at: slotRes.rows[0].starts_at } })
-    } catch (inner) {
-      await query('ROLLBACK', [])
-      throw inner
+    res.json({ success: true, appointment: appt })
+  } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: err.errors })
     }
-  } catch (err) {
-    if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message })
+    if (err.message === 'Slot not found') return res.status(404).json({ error: err.message })
+    if (err.message === 'Slot already booked. Please choose another.') return res.status(409).json({ error: err.message })
+    
     console.error('POST /appointments error:', err)
     res.status(500).json({ error: 'Internal server error' })
   }

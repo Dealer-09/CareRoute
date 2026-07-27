@@ -2,7 +2,7 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { z } from 'zod'
-import { query } from '../db/connection'
+import { query, transaction } from '../db/connection'
 
 const router = Router()
 
@@ -33,29 +33,34 @@ router.post('/signup', async (req, res) => {
     const hash = await bcrypt.hash(password, 12)
     
     // Start transaction since we're creating user + patient profile
-    await query('BEGIN')
-    
-    const userResult = await query(
-      'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, role',
-      [email, hash, role]
-    )
-    const user = userResult.rows[0]
-
-    // 3. Create linked profile based on role
-    if (role === 'patient') {
-      await query(
-        'INSERT INTO patients (user_id, name) VALUES ($1, $2)',
-        [user.id, name || '']
+    const user = await transaction(async (client) => {
+      const userResult = await client.query(
+        'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, role',
+        [email, hash, role]
       )
-    }
+      const u = userResult.rows[0]
 
-    // Log the event
-    await query(
-      'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
-      [user.id, 'USER_SIGNUP', 'users', user.id]
-    )
+      // 3. Create linked profile based on role
+      if (role === 'patient') {
+        await client.query(
+          'INSERT INTO patients (user_id, name) VALUES ($1, $2)',
+          [u.id, name || '']
+        )
+      } else if (role === 'doctor') {
+        await client.query(
+          'INSERT INTO doctors (user_id, name, specialty) VALUES ($1, $2, $3)',
+          [u.id, name || '', 'General Practice'] // Default specialty, can be updated later
+        )
+      }
 
-    await query('COMMIT')
+      // Log the event
+      await client.query(
+        'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
+        [u.id, 'USER_SIGNUP', 'users', u.id]
+      )
+
+      return u
+    })
 
     // 4. Issue token
     const token = jwt.sign({ id: user.id, role: user.role }, secret, { expiresIn: '7d' })
@@ -63,7 +68,6 @@ router.post('/signup', async (req, res) => {
     res.json({ token, user: { id: user.id, email, role: user.role } })
 
   } catch (err) {
-    await query('ROLLBACK')
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: err.errors })
     }
