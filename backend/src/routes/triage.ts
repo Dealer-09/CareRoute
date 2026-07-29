@@ -6,17 +6,22 @@ import { requireAuth, AuthRequest } from '../middleware/auth'
 import { sendEmergencyAlert } from '../lib/telegram'
 import { addConnection, removeConnection, broadcast } from '../lib/sse'
 import { scheduleFollowUp } from '../lib/followup'
+import { SafetyEngine, OodEngine } from '@careroute/core'
+
+import { randomUUID } from 'crypto'
 
 const router = Router()
 
-// Helper: verify JWT from query param (EventSource can't set headers)
-function verifyToken(token: string): { id: string; role: string } | null {
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET!) as { id: string; role: string }
-  } catch {
-    return null
-  }
-}
+// Store short-lived SSE tickets (valid for 30s)
+const sseTickets = new Map<string, { id: string; role: string }>()
+
+router.post('/queue/ticket', requireAuth, (req: AuthRequest, res) => {
+  const ticket = randomUUID()
+  sseTickets.set(ticket, req.user!)
+  setTimeout(() => sseTickets.delete(ticket), 30000)
+  res.json({ ticket })
+})
+
 
 // TriageResult schema based on our frontend type
 const triageCaseSchema = z.object({
@@ -34,6 +39,13 @@ const triageCaseSchema = z.object({
   for_dependent_id:      z.string().uuid().optional(),
   for_name:              z.string().optional(),
   confidence:            z.number().int().min(0).max(100).optional(),
+  vitals: z.object({
+    heartRateBpm: z.number().optional(),
+    spo2Percent: z.number().optional(),
+    temperatureCelsius: z.number().optional(),
+    systolicBp: z.number().optional(),
+    diastolicBp: z.number().optional(),
+  }).optional(),
 })
 
 // Protected route: Save a new triage case
@@ -42,9 +54,12 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
     const data = triageCaseSchema.parse(req.body)
     const userId = req.user!.id
 
-    // 1. Get the patient ID for this user
-    const patientResult = await query('SELECT id FROM patients WHERE user_id = $1', [userId])
+    // 1. Get the patient ID and name for this user
+    const patientResult = await query('SELECT id, name, gender, date_of_birth FROM patients WHERE user_id = $1', [userId])
     let patientId = patientResult.rows[0]?.id
+    let patientName = patientResult.rows[0]?.name
+    let patientGender = patientResult.rows[0]?.gender
+    let patientDob = patientResult.rows[0]?.date_of_birth
 
     if (!patientId) {
       // Fallback: create patient profile if missing (should be created at signup)
@@ -55,13 +70,85 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
       patientId = newPatient.rows[0].id
     }
 
+    if (data.for_dependent_id) {
+      // Verify the dependent belongs to the requesting user before using their demographics.
+      // Without this check, a patient could submit a triage attributed to any dependent by UUID.
+      const depResult = await query(
+        'SELECT gender, date_of_birth FROM dependents WHERE id = $1 AND user_id = $2',
+        [data.for_dependent_id, userId]
+      )
+      if (depResult.rows.length === 0) {
+        return res.status(403).json({ error: 'Dependent not found or does not belong to your account' })
+      }
+      patientGender = depResult.rows[0].gender
+      patientDob = depResult.rows[0].date_of_birth
+    }
+
+    const calculatedAge = patientDob ? Math.floor((Date.now() - new Date(patientDob).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 30
+    const sexMap: Record<string, string> = { 'M': 'MALE', 'F': 'FEMALE', 'Other': 'OTHER' }
+    const calculatedSex = (sexMap[patientGender] || 'OTHER') as 'MALE' | 'FEMALE' | 'OTHER'
+
+    // --- NEW V2 ARCHITECTURE INJECTION: SAFETY & OOD ENGINES ---
+    const safetyEngine = new SafetyEngine();
+    const oodEngine = new OodEngine();
+
+    // Map req.body to PatientPresentation format to satisfy the engines
+    const patientPresentation = {
+      patientId: String(patientId),
+      age: calculatedAge,
+      sex: calculatedSex,
+      chiefComplaint: data.symptom_text || data.summary,
+      symptomDurationHours: data.duration && data.duration.includes('days') ? 72 : 24, // basic fallback
+      vitals: { 
+        heartRateBpm:       data.vitals?.heartRateBpm, 
+        spo2Percent:        data.vitals?.spo2Percent,
+        temperatureCelsius: data.vitals?.temperatureCelsius, 
+        systolicBp:         data.vitals?.systolicBp,
+        diastolicBp:        data.vitals?.diastolicBp,
+      },
+      redFlags: {
+        unconsciousOrUnresponsive: data.redFlags?.includes('Fainting/confusion') || false,
+        severeBreathingDifficulty: data.redFlags?.includes('Severe shortness of breath') || false,
+        activeHeavyBleeding: data.redFlags?.includes("Bleeding that won't stop") || false,
+        suddenSevereChestPain: data.redFlags?.includes('Chest pain') || false,
+        newOnsetParalysisOrSlurredSpeech: data.redFlags?.includes('One-sided weakness/face droop') || false
+      },
+      context: {
+        extractedMedications: [],
+        knownAllergies: []
+      }
+    };
+
+    // ENGINE 4: Deterministic Safety Gateway
+    const safetyResult = safetyEngine.evaluate(patientPresentation);
+    if (safetyResult.action === 'REJECT_INVALID_DATA') {
+      return res.status(400).json({ error: 'Rejected by Safety Engine', reason: safetyResult.reason });
+    }
+    if (safetyResult.action === 'ROUTE_RED') {
+      data.severity = 'Red';
+      data.emergency = true;
+      data.summary = `[SAFETY ESCALATION] ${data.summary}`;
+      data.redFlags = [...(data.redFlags || []), `Safety Check Failed: ${safetyResult.reason}`];
+    }
+
+    // ENGINE 5: OOD Detection
+    const oodResult = oodEngine.evaluate(patientPresentation);
+    if (oodResult.action === 'ABSTAIN') {
+      // Escalated due to OOD
+      data.severity = 'Red';
+      data.emergency = true;
+      data.summary = `[OOD ESCALATION] ${data.summary}`;
+      data.redFlags = [...(data.redFlags || []), `OOD Detection Triggered: ${oodResult.reason}`];
+    }
+    // --- END V2 ARCHITECTURE INJECTION ---
+
     // 2. Insert the triage case
     const insertResult = await query(
       `INSERT INTO triage_cases (
         patient_id, severity, emergency, condition_guess, summary,
         reasoning, red_flags, recommended_specialty, specialty_reason,
-        advice, duration, symptom_text, for_dependent_id, for_name, confidence
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id`,
+        advice, duration, symptom_text, for_dependent_id, for_name, confidence, decision_record
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id`,
       [
         patientId,
         data.severity,
@@ -78,6 +165,7 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
         data.for_dependent_id ?? null,
         data.for_name ?? null,
         data.confidence ?? null,
+        (data as any).decision_record ? JSON.stringify((data as any).decision_record) : null
       ]
     )
 
@@ -91,13 +179,10 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
 
     // 4. Fire Telegram alert for Red / emergency cases (non-blocking)
     if (data.severity === 'Red' || data.emergency) {
-      const patientResult2 = await query(
-        'SELECT name FROM patients WHERE id = $1', [patientId]
-      )
       sendEmergencyAlert({
         severity:             data.severity,
         emergency:            data.emergency,
-        patientName:          patientResult2.rows[0]?.name || 'Unknown Patient',
+        patientName:          patientName || 'Unknown Patient',
         conditionGuess:       data.condition_guess,
         summary:              data.summary,
         redFlags:             data.redFlags,
@@ -136,15 +221,30 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
 router.get('/history', requireAuth, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.id
+    const limit  = Math.min(Math.max(parseInt(req.query.limit  as string) || 20, 1), 100)
+    const offset = Math.max(parseInt(req.query.offset as string) || 0, 0)
 
-    const historyResult = await query(
-      `SELECT t.* 
-       FROM triage_cases t
-       JOIN patients p ON t.patient_id = p.id
-       WHERE p.user_id = $1
-       ORDER BY t.created_at DESC`,
-      [userId]
-    )
+    const [historyResult, countResult] = await Promise.all([
+      query(
+        `SELECT t.id, t.severity, t.emergency, t.condition_guess, t.summary, 
+                t.reasoning, t.red_flags, t.duration,
+                t.recommended_specialty, t.specialty_reason, t.advice, t.created_at,
+                t.for_dependent_id, t.for_name
+         FROM triage_cases t
+         JOIN patients p ON t.patient_id = p.id
+         WHERE p.user_id = $1
+         ORDER BY t.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset]
+      ),
+      query(
+        `SELECT COUNT(*) AS total
+         FROM triage_cases t
+         JOIN patients p ON t.patient_id = p.id
+         WHERE p.user_id = $1`,
+        [userId]
+      ),
+    ])
 
     // Map DB columns to our frontend TriageResult type
     const history = historyResult.rows.map((row: any) => ({
@@ -159,10 +259,20 @@ router.get('/history', requireAuth, async (req: AuthRequest, res) => {
       specialty_reason: row.specialty_reason,
       advice: row.advice,
       duration: row.duration,
+      for_dependent_id: row.for_dependent_id,
+      for_name: row.for_name,
       timestamp: new Date(row.created_at).getTime()
     }))
 
-    res.json({ history })
+    res.json({
+      history,
+      pagination: {
+        total:  Number(countResult.rows[0].total),
+        limit,
+        offset,
+        has_more: offset + history.length < Number(countResult.rows[0].total),
+      },
+    })
   } catch (err) {
     console.error('Get history error:', err)
     res.status(500).json({ error: 'Internal server error' })
@@ -171,17 +281,17 @@ router.get('/history', requireAuth, async (req: AuthRequest, res) => {
 
 
 // Clinician-only route: live queue stream (Server-Sent Events)
-// EventSource cannot set custom headers — accept ?token= as a fallback
 router.get('/queue/stream', (req, res, next) => {
-  const token = req.query.token as string
-  if (token) {
-    const user = verifyToken(token)
+  const ticket = req.query.ticket as string
+  if (ticket) {
+    const user = sseTickets.get(ticket)
     if (user) {
-      (req as AuthRequest).user = user
+      sseTickets.delete(ticket) // Single-use
+      ;(req as AuthRequest).user = user
       return next()
     }
   }
-  requireAuth(req, res, next)
+  return res.status(401).json({ error: 'Invalid or expired SSE ticket' })
 }, (req: AuthRequest, res) => {
   const { role } = req.user!
   if (role !== 'doctor' && role !== 'admin') {
@@ -196,10 +306,10 @@ router.get('/queue/stream', (req, res, next) => {
   // Send a heartbeat immediately so the client knows it's connected
   res.write('event: connected\ndata: {}\n\n')
 
-  const id = addConnection(res)
+  addConnection(res)
 
   // Clean up when the client disconnects
-  req.on('close', () => removeConnection(id))
+  req.on('close', () => removeConnection(res))
 })
 
 // Clinician-only route: all triage cases across all patients
@@ -221,11 +331,12 @@ router.get('/queue', requireAuth, async (req: AuthRequest, res) => {
          p.date_of_birth
        FROM triage_cases t
        JOIN patients p ON t.patient_id = p.id
+       ${req.query.since ? 'WHERE t.created_at > $1' : ''}
        ORDER BY
          t.reviewed ASC,
          CASE t.severity WHEN 'Red' THEN 1 WHEN 'Amber' THEN 2 ELSE 3 END ASC,
          t.created_at DESC`,
-      []
+      req.query.since ? [new Date(req.query.since as string).toISOString()] : []
     )
 
     const queue = result.rows.map((row: any) => ({
@@ -263,7 +374,7 @@ router.patch('/:id/review', requireAuth, async (req: AuthRequest, res) => {
       return res.status(403).json({ error: 'Clinician access required' })
     }
 
-    const { id } = req.params
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
     const result = await query(
       `UPDATE triage_cases
        SET reviewed = TRUE, reviewed_by = $1, reviewed_at = NOW()
@@ -296,7 +407,7 @@ router.patch('/:id/note', requireAuth, async (req: AuthRequest, res) => {
       return res.status(403).json({ error: 'Clinician access required' })
     }
 
-    const { id } = req.params
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
     const { note } = z.object({ note: z.string().max(2000) }).parse(req.body)
 
     const result = await query(

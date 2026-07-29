@@ -4,13 +4,25 @@ import jwt from 'jsonwebtoken'
 import { z } from 'zod'
 import { query, transaction } from '../db/connection'
 
+import rateLimit from 'express-rate-limit'
+
 const router = Router()
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 requests per windowMs
+  message: { error: 'Too many requests from this IP, please try again after 15 minutes' }
+})
 
 const signupSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(6),
+  password: z.string().min(6).max(128),
   role: z.enum(['patient', 'doctor']).default('patient'),
   name: z.string().optional() // For patient profile creation
+}).superRefine((data, ctx) => {
+  if (data.role === 'doctor' && (!data.name || data.name.trim() === '')) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Name is required for doctors', path: ['name'] })
+  }
 })
 
 const signinSchema = z.object({
@@ -18,7 +30,7 @@ const signinSchema = z.object({
   password: z.string()
 })
 
-router.post('/signup', async (req, res) => {
+router.post('/signup', authLimiter, async (req, res) => {
   try {
     const { email, password, role, name } = signupSchema.parse(req.body)
     const secret = process.env.JWT_SECRET!
@@ -76,7 +88,7 @@ router.post('/signup', async (req, res) => {
   }
 })
 
-router.post('/signin', async (req, res) => {
+router.post('/signin', authLimiter, async (req, res) => {
   try {
     const { email, password } = signinSchema.parse(req.body)
     const secret = process.env.JWT_SECRET!

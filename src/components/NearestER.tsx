@@ -106,7 +106,7 @@ export default function NearestER() {
             className="inline-flex items-center gap-2 text-sm font-semibold text-red-700 hover:text-red-900 underline underline-offset-2"
           >
             <ExternalLink size={14} />
-            Search "Emergency Hospital Near Me" on Google Maps →
+            Search &quot;Emergency Hospital Near Me&quot; on Google Maps →
           </a>
         </div>
       )}

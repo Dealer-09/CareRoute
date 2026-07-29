@@ -5,7 +5,7 @@
  * Its job: catch obvious life-threatening symptom patterns reliably and immediately.
  * It must never be "softened" or made more nuanced — it is the hard safety net.
  *
- * If this fires → skip Gemini → return emergency response immediately.
+ * If this fires → skip ML Pipeline → return emergency response immediately.
  */
 
 /** Patterns where ANY keyword in `pattern` triggers immediately (no companion needed) */
@@ -40,8 +40,7 @@ const STANDALONE_PATTERNS: Array<{ keywords: string[]; label: string; flag: stri
 const CHEST_KEYWORDS = ['chest pain', 'chest tightness', 'tight chest', 'pressure in chest', 'chest pressure']
 const CHEST_COMPANIONS = ['sweating', 'sweat', 'arm pain', 'jaw pain', 'nausea', 'shortness of breath', 'breathless', 'unable to breathe', 'radiating']
 
-/** Checkbox flags from the TriageWizard that immediately trigger emergency */
-const CRITICAL_FLAGS = [
+export const CRITICAL_FLAGS = [
   'Chest pain',
   'Severe shortness of breath',
   'Fainting/confusion',

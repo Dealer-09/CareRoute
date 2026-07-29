@@ -30,7 +30,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
 
 # backend build output
@@ -48,3 +48,31 @@ backend/src/scripts/
 /tests
 future_roadmap.md
 plan.md
+
+# legacy architecture workspace
+v2-architecture/
+
+# ─── ML model binaries — too large for git, download separately ───────────────
+# rx_ocr_quantized.tflite is 545 MB — exceeds GitHub's 100 MB limit.
+# Download from the Kaggle training output and place in public/models/.
+public/models/*.tflite
+public/models/tokenizer.json
+public/models/special_tokens_map.json
+public/models/tokenizer_config.json
+
+# ─── Training scripts — Kaggle notebook artifacts, not part of the app ────────
+train.py
+
+# ─── Internal audit / working files — generated during code review sessions ───
+audit_agent1.md
+audit_agent2.md
+audit_agent3.md
+audit_final.md
+audit_part1.txt
+audit_part2.txt
+audit_part3.txt
+audit_part4.txt
+audit_part5.txt
+audit_report_extracted.txt
+scratch_search.js
+scratch_transcript_search.txt

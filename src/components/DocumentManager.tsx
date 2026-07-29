@@ -1,7 +1,7 @@
 ﻿"use client"
 import { BACKEND_URL } from '@/lib/api'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   FileText,
   Upload,
@@ -43,12 +43,7 @@ export default function DocumentManager() {
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('careRouteToken') : null
 
-  useEffect(() => {
-    if (token) fetchDocs()
-    else setLoading(false)
-  }, [token])
-
-  async function fetchDocs() {
+  const fetchDocs = useCallback(async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/documents`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -61,7 +56,12 @@ export default function DocumentManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [token])
+
+  useEffect(() => {
+    if (token) fetchDocs()
+    else setLoading(false)
+  }, [token, fetchDocs])
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]

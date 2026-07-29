@@ -57,7 +57,7 @@ export default function Home() {
               <div className="max-w-xl animate-in fade-in slide-in-from-bottom-8 duration-700">
                 <div className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700 mb-8">
                   <span className="flex h-2 w-2 rounded-full bg-blue-600 mr-2 animate-pulse"></span>
-                  AI-Powered Healthcare Triage
+                  Medical Healthcare Triage
                 </div>
 
                 <h1 className="text-5xl lg:text-7xl font-bold tracking-tight text-slate-900 mb-6 leading-[1.1]">
@@ -66,7 +66,7 @@ export default function Home() {
                 </h1>
 
                 <p className="text-xl text-slate-600 mb-10 leading-relaxed">
-                  CareRoute AI uses advanced medical algorithms to assess your symptoms,
+                  CareRoute uses advanced medical algorithms to assess your symptoms,
                   recommend specialists, and connect you with the right healthcare provider instantly.
                 </p>
 
@@ -99,7 +99,7 @@ export default function Home() {
                       <Stethoscope size={32} strokeWidth={1.5} />
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-slate-900">AI Analysis</h3>
+                      <h3 className="text-lg font-bold text-slate-900">Clinical Analysis</h3>
                       <p className="text-slate-500">Real-time symptom assessment</p>
                     </div>
                   </div>
@@ -128,7 +128,7 @@ export default function Home() {
                 </div>
 
                 {/* Decorative blob behind cards */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-linear-to-tr from-blue-100/50 to-indigo-100/50 rounded-full blur-3xl -z-10" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-gradient-to-tr from-blue-100/50 to-indigo-100/50 rounded-full blur-3xl -z-10" />
               </div>
             </div>
 

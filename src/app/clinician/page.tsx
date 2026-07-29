@@ -1,11 +1,11 @@
-﻿"use client"
+"use client"
 import { BACKEND_URL } from '@/lib/api'
 
 import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Bell, Search, Settings, DatabaseZap, Loader2, ShieldAlert, Radio } from 'lucide-react'
+import { Bell, Search, Settings, DatabaseZap, Loader2, Radio } from 'lucide-react'
 import { timeAgo } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -68,6 +68,8 @@ export default function Clinician() {
   const [authorized, setAuthorized] = useState(false)
   const [liveConnected, setLiveConnected] = useState(false)
   const sseRef = useRef<EventSource | null>(null)
+  // Track when we last successfully fetched the queue so reconnects can use ?since=
+  const lastQueueFetchAt = useRef<string | null>(null)
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('careRouteToken') : null
 
@@ -77,7 +79,8 @@ export default function Clinician() {
     const raw   = localStorage.getItem('careRouteUser')
     if (!token || !raw) { router.replace('/'); return }
     try {
-      const user = JSON.parse(raw)
+      // Decode role from JWT token payload for defense-in-depth against client-side localStorage spoofing
+      const user = JSON.parse(atob(token.split('.')[1]))
       if (user.role !== 'doctor' && user.role !== 'admin') {
         router.replace('/')
         return
@@ -86,6 +89,9 @@ export default function Clinician() {
     } catch {
       router.replace('/')
     }
+  // router is intentionally omitted — Next.js router is stable and including it
+  // would cause this effect to re-run on every render cycle.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ─── Initial queue fetch + SSE subscription ─────────────────────────────────
@@ -106,31 +112,83 @@ export default function Clinician() {
         if (!res.ok) throw new Error('Failed to load queue')
         return res.json()
       })
-      .then(data => { if (data) setQueue(data.queue) })
+      .then(data => {
+        if (data) {
+          setQueue(data.queue)
+          // Record the fetch time so reconnects know where to resume from
+          lastQueueFetchAt.current = new Date().toISOString()
+        }
+      })
       .catch(() => setError('Could not load patient queue. Make sure the backend is running.'))
       .finally(() => setLoading(false))
 
-    // 2. Subscribe to live updates via SSE
-    const es = new EventSource(
-      `${BACKEND_URL}/api/triage/queue/stream?token=${token}`
-    )
-    sseRef.current = es
-
-    es.addEventListener('connected', () => setLiveConnected(true))
-    es.addEventListener('new_case', (e: MessageEvent) => {
-      try {
-        // Re-fetch the full queue to get complete patient details
-        fetch(`${BACKEND_URL}/api/triage/queue`, {
-          headers: { Authorization: `Bearer ${token}` },
+    let reconnectTimeout: ReturnType<typeof setTimeout>
+    
+    function connectSSE() {
+      // 2. Subscribe to live updates via SSE ticket
+      fetch(`${BACKEND_URL}/api/triage/queue/ticket`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token!}` }
+      })
+        .then(r => r.json())
+        .then(({ ticket }) => {
+          if (!ticket) return
+          const es = new EventSource(`${BACKEND_URL}/api/triage/queue/stream?ticket=${ticket}`)
+          sseRef.current = es
+          
+          es.addEventListener('connected', () => setLiveConnected(true))
+          es.addEventListener('new_case', (e: Event) => {
+            try {
+              const newCase = JSON.parse((e as MessageEvent).data) as QueueCase
+              setQueue(prev => {
+                if (prev.some(c => c.id === newCase.id)) return prev
+                return [newCase, ...prev]
+              })
+              lastQueueFetchAt.current = new Date().toISOString()
+            } catch { /* ignore malformed event */ }
+          })
+          es.onerror = () => {
+            setLiveConnected(false)
+            es.close()
+            // On reconnect, fetch only cases that arrived since we last had the queue
+            // This plugs the gap window without a full re-fetch of the entire queue
+            const since = lastQueueFetchAt.current
+            const sinceParam = since ? `?since=${encodeURIComponent(since)}` : ''
+            reconnectTimeout = setTimeout(() => {
+              if (since) {
+                fetch(`${BACKEND_URL}/api/triage/queue${sinceParam}`, {
+                  headers: { Authorization: `Bearer ${token!}` }
+                })
+                  .then(r => r.json())
+                  .then(data => {
+                    if (data?.queue?.length > 0) {
+                      setQueue(prev => {
+                        const existingIds = new Set(prev.map(c => c.id))
+                        const newCases = data.queue.filter((c: QueueCase) => !existingIds.has(c.id))
+                        return newCases.length > 0 ? [...newCases, ...prev] : prev
+                      })
+                    }
+                    lastQueueFetchAt.current = new Date().toISOString()
+                  })
+                  .catch(() => {})
+              }
+              connectSSE()
+            }, 5000)
+          }
         })
-          .then(r => r.json())
-          .then(data => setQueue(data.queue))
-          .catch(() => {})
-      } catch { /* ignore */ }
-    })
-    es.onerror = () => setLiveConnected(false)
+        .catch(() => {
+          setLiveConnected(false)
+          reconnectTimeout = setTimeout(connectSSE, 5000)
+        })
+    }
 
-    return () => { es.close(); setLiveConnected(false) }
+    connectSSE()
+
+    return () => { 
+      clearTimeout(reconnectTimeout)
+      if (sseRef.current) sseRef.current.close()
+      setLiveConnected(false) 
+    }
   }, [authorized])
 
   const filtered = queue.filter(c =>

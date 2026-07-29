@@ -7,6 +7,8 @@ import { saveAnalysisToHistory } from '@/lib/storage'
 import DoctorList from './DoctorList'
 import NearestER from './NearestER'
 import { Button } from './ui/button'
+import dynamic from 'next/dynamic'
+const PrescriptionUploader = dynamic(() => import('./PrescriptionUploader').then(mod => mod.PrescriptionUploader), { ssr: false })
 import {
   AlertTriangle,
   CheckCircle,
@@ -19,10 +21,9 @@ import {
   Mic,
   MicOff,
   ShieldCheck,
-  BookOpen,
-  Loader2,
   Users,
 } from 'lucide-react'
+import { DURATION_LABELS } from '@/lib/durations'
 
 
 // ─── Dependent type ───────────────────────────────────────────────────────────
@@ -37,8 +38,6 @@ type Dependent = {
 
 const DISCLAIMER =
   'CareRoute is a triage aid only. It does not provide a medical diagnosis and is not a substitute for professional medical advice, emergency services, or a qualified clinician. If you are unsure, always seek professional help.'
-
-const DURATIONS = ['Hours', '1–3 days', '4–7 days', '1–4 weeks', '>1 month']
 
 const CRITICAL_FLAGS = [
   'Chest pain',
@@ -93,15 +92,13 @@ type Props = {
 export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) => {
   const [step, setStep]           = useState(1)
   const [text, setText]           = useState('')
-  const [duration, setDuration]   = useState(DURATIONS[1])
+  const [duration, setDuration]   = useState(DURATION_LABELS[1])
   const [flags, setFlags]         = useState<string[]>([])
   const [files, setFiles]         = useState<string[]>([])
   const [result, setResult]       = useState<TriageResult | null>(null)
   const [error, setError]         = useState<string | null>(null)
   const [loading, setLoading]     = useState(false)
   const [listening, setListening] = useState(false)
-  const [pubmed, setPubmed]       = useState<{ title: string; url: string }[]>([])
-  const [pubmedLoading, setPubmedLoading] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
 
@@ -115,14 +112,20 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
   // Dependent profiles
   const [dependents,   setDependents]  = useState<Dependent[]>([])
   const [selectedFor,  setSelectedFor] = useState<'self' | Dependent>('self')
+  // Own profile — used so the ClinicalRuleEngine gets real age/sex for self-triage
+  const [selfProfile, setSelfProfile] = useState<{ date_of_birth: string | null; gender: 'M' | 'F' | 'Other' | null } | null>(null)
 
-  // Fetch dependents on mount
+  // Fetch dependents and own profile on mount
   useEffect(() => {
     const token = localStorage.getItem('careRouteToken')
     if (!token) return
     fetch(`${BACKEND_URL}/api/dependents`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => { if (d.dependents) setDependents(d.dependents) })
+      .catch(() => {})
+    fetch(`${BACKEND_URL}/api/profile`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => { if (d.date_of_birth !== undefined) setSelfProfile({ date_of_birth: d.date_of_birth, gender: d.gender }) })
       .catch(() => {})
   }, [])
   // ─── Voice-to-text ─────────────────────────────────────────────────────────
@@ -145,7 +148,7 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
     recognitionRef.current = rec
 
     let final = text
-    rec.onresult = (e: any) => {
+    rec.onresult = (e: Event & { resultIndex: number; results: SpeechRecognitionResultList }) => {
       let interim = ''
       for (let i = e.resultIndex; i < e.results.length; i++) {
         if (e.results[i].isFinal) final += e.results[i][0].transcript + ' '
@@ -159,40 +162,10 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
     setListening(true)
   }
 
-  // ─── PubMed citations (free E-utilities API) ─────────────────────────────
-  useEffect(() => {
-    if (!result) return
-    const query = encodeURIComponent(`${result.condition_guess} triage`)
-    setPubmedLoading(true)
-    const baseUrl = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
-    fetch(`${baseUrl}/esearch.fcgi?db=pubmed&term=${query}&retmax=3&sort=relevance&retmode=json`)
-      .then(r => r.json())
-      .then(async data => {
-        const ids: string[] = data.esearchresult?.idlist ?? []
-        if (ids.length === 0) return
-        const summary = await fetch(`${baseUrl}/esummary.fcgi?db=pubmed&id=${ids.join(',')}&retmode=json`)
-        const sData = await summary.json()
-        const articles = ids.map(id => ({
-          title: sData.result?.[id]?.title ?? 'PubMed Article',
-          url: `https://pubmed.ncbi.nlm.nih.gov/${id}/`,
-        })).filter(a => a.title !== 'PubMed Article')
-        setPubmed(articles)
-      })
-      .catch(() => {})
-      .finally(() => setPubmedLoading(false))
-  }, [result])
+
 
   const toggleFlag = (f: string) =>
     setFlags(prev => (prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]))
-
-  const onFileChange: React.ChangeEventHandler<HTMLInputElement> = e => {
-    const list = Array.from(e.target.files ?? [])
-    setFiles(prev => [...prev, ...list.map((f: File) => f.name)])
-    e.currentTarget.value = ''
-  }
-
-  const removeFile = (name: string) =>
-    setFiles(prev => prev.filter(f => f !== name))
 
   const handleNext = async () => {
     setError(null)
@@ -210,9 +183,13 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
       setLoading(true)
       setStep(3) // show loading state in step 3 immediately
       try {
+        const token = localStorage.getItem('careRouteToken')
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (token) headers['Authorization'] = `Bearer ${token}`
+
         const res = await fetch('/api/triage', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             text, duration, flags,
             vitals: {
@@ -222,6 +199,14 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
               bloodPressure: bloodPressure || undefined,
             },
             dependent: selectedFor !== 'self' ? selectedFor : undefined,
+            // Pass own profile age/sex for self-triage so ClinicalRuleEngine
+            // gets real demographics instead of defaulting to age=30, sex=OTHER
+            ...(selectedFor === 'self' && selfProfile ? {
+              age: selfProfile.date_of_birth
+                ? Math.floor((Date.now() - new Date(selfProfile.date_of_birth).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
+                : undefined,
+              sex: selfProfile.gender === 'M' ? 'MALE' : selfProfile.gender === 'F' ? 'FEMALE' : undefined,
+            } : {}),
           }),
         })
 
@@ -236,7 +221,6 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
         saveAnalysisToHistory(withMeta)
 
         // Phase 0: Save to DB if logged in
-        const token = localStorage.getItem('careRouteToken')
         if (token) {
           try {
             await fetch(`${BACKEND_URL}/api/triage/save`, {
@@ -250,6 +234,13 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
                 symptom_text:     text,
                 for_dependent_id: selectedFor !== 'self' ? selectedFor.id   : undefined,
                 for_name:         selectedFor !== 'self' ? selectedFor.name  : undefined,
+                vitals: {
+                  heartRateBpm: heartRate ? parseInt(heartRate) || undefined : undefined,
+                  spo2Percent: spo2 ? parseInt(spo2) || undefined : undefined,
+                  temperatureCelsius: temperature ? parseFloat(temperature) || undefined : undefined,
+                  systolicBp: bloodPressure?.includes('/') ? parseInt(bloodPressure.split('/')[0]) || undefined : undefined,
+                  diastolicBp: bloodPressure?.includes('/') ? parseInt(bloodPressure.split('/')[1]) || undefined : undefined,
+                }
               })
 
             })
@@ -452,7 +443,7 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
                   onChange={e => setDuration(e.target.value)}
                   className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                 >
-                  {DURATIONS.map(d => (
+                  {DURATION_LABELS.map(d => (
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
@@ -517,36 +508,16 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
                 </div>
               </div>
 
-              {/* File upload */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Upload medical documents{' '}
-                  <span className="text-slate-400 font-normal">(optional)</span>
-                </label>
-                <input
-                  type="file"
-                  multiple
-                  onChange={onFileChange}
-                  className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+              {/* File upload & WebGPU Extraction */}
+              <div className="pt-2">
+                <PrescriptionUploader 
+                  onExtraction={(extractedText) => {
+                    setText(prev => prev.trim() ? prev + '\n\n' + extractedText : extractedText)
+                  }}
+                  onFileSelect={(f) => {
+                    setFiles(prev => [...prev, f.name])
+                  }}
                 />
-                {files.length > 0 && (
-                  <div className="mt-3 space-y-1.5">
-                    {files.map(f => (
-                      <div
-                        key={f}
-                        className="flex items-center justify-between text-sm bg-slate-50 px-3 py-2 rounded-lg border border-slate-200"
-                      >
-                        <span className="truncate text-slate-700">📄 {f}</span>
-                        <button
-                          onClick={() => removeFile(f)}
-                          className="text-red-400 hover:text-red-600 ml-2 font-bold text-lg leading-none"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {error && (
@@ -580,7 +551,7 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
           const cfg = getSeverityConfig(result.severity)
           const SeverityIcon = cfg.Icon
           return (
-            <div className="space-y-5 animate-in fade-in duration-500">
+            <div className="space-y-5 animate-in fade-in duration-500" aria-live="polite" aria-atomic="true">
 
               {/* Emergency banner */}
               {result.emergency && (
@@ -637,7 +608,7 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
                 <div className="bg-green-50 border border-green-200 rounded-2xl p-5 space-y-4">
                   <div className="flex items-center gap-2">
                     <ShieldCheck size={18} className="text-green-600" />
-                    <span className="text-sm font-bold text-green-800">You're likely fine — here's what to do</span>
+                    <span className="text-sm font-bold text-green-800">You&apos;re likely fine — here&apos;s what to do</span>
                   </div>
                   <div>
                     <p className="text-xs font-bold text-green-700 uppercase tracking-wider mb-2">Self-Care Steps</p>
@@ -730,33 +701,7 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
                 </div>
               )}
 
-              {/* PubMed citations */}
-              {(pubmedLoading || pubmed.length > 0) && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <BookOpen size={17} className="text-indigo-600" />
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Clinical Evidence</span>
-                    {pubmedLoading && <Loader2 size={13} className="text-slate-400 animate-spin ml-1" />}
-                  </div>
-                  {pubmed.length === 0 && pubmedLoading && (
-                    <p className="text-xs text-slate-400">Searching PubMed…</p>
-                  )}
-                  <ul className="space-y-2">
-                    {pubmed.map((p, i) => (
-                      <li key={i}>
-                        <a
-                          href={p.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-indigo-700 hover:text-indigo-900 hover:underline leading-snug line-clamp-2 block"
-                        >
-                          {p.title}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+
 
               {/* Doctor list */}
               <div>

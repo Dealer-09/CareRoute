@@ -39,6 +39,10 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
        RETURNING id, name, date_of_birth, gender, relationship, created_at`,
       [req.user!.id, data.name, data.date_of_birth || null, data.gender || null, data.relationship]
     )
+    await query(
+      'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
+      [req.user!.id, 'CREATE_DEPENDENT', 'dependents', result.rows[0].id]
+    )
     res.status(201).json({ dependent: result.rows[0] })
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -55,19 +59,40 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res) => {
     const data = dependentSchema.partial().parse(req.body)
     const { id } = req.params
 
-    // Verify ownership
-    const check = await query('SELECT id FROM dependents WHERE id = $1 AND user_id = $2', [id, req.user!.id])
-    if (check.rows.length === 0) return res.status(404).json({ error: 'Dependent not found' })
+    const updates: string[] = []
+    const values: unknown[] = []
+    let i = 1
 
+    if (data.name !== undefined) { updates.push(`name = $${i++}`); values.push(data.name) }
+    if (data.date_of_birth !== undefined) { updates.push(`date_of_birth = $${i++}`); values.push(data.date_of_birth || null) }
+    if (data.gender !== undefined) { updates.push(`gender = $${i++}`); values.push(data.gender || null) }
+    if (data.relationship !== undefined) { updates.push(`relationship = $${i++}`); values.push(data.relationship) }
+
+    // No fields to update — verify ownership and return current row
+    if (updates.length === 0) {
+      const current = await query(
+        'SELECT id, name, date_of_birth, gender, relationship, created_at FROM dependents WHERE id = $1 AND user_id = $2',
+        [id, req.user!.id]
+      )
+      if (current.rows.length === 0) return res.status(404).json({ error: 'Dependent not found' })
+      return res.json({ dependent: current.rows[0] })
+    }
+
+    // Single atomic UPDATE that combines ownership check + write — no SELECT/UPDATE race condition
+    values.push(id, req.user!.id)
     const result = await query(
       `UPDATE dependents
-       SET name          = COALESCE($1, name),
-           date_of_birth = COALESCE($2, date_of_birth),
-           gender        = COALESCE($3, gender),
-           relationship  = COALESCE($4, relationship)
-       WHERE id = $5
+       SET ${updates.join(', ')}
+       WHERE id = $${i} AND user_id = $${i + 1}
        RETURNING id, name, date_of_birth, gender, relationship, created_at`,
-      [data.name, data.date_of_birth || null, data.gender || null, data.relationship, id]
+      values
+    )
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Dependent not found' })
+
+    await query(
+      'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
+      [req.user!.id, 'UPDATE_DEPENDENT', 'dependents', id]
     )
     res.json({ dependent: result.rows[0] })
   } catch (err) {
@@ -86,6 +111,10 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
       [id, req.user!.id]
     )
     if (result.rows.length === 0) return res.status(404).json({ error: 'Dependent not found' })
+    await query(
+      'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
+      [req.user!.id, 'DELETE_DEPENDENT', 'dependents', id]
+    )
     res.json({ success: true })
   } catch (err) {
     console.error('DELETE /dependents/:id error:', err)

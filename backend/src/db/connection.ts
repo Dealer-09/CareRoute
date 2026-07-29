@@ -1,7 +1,10 @@
-import { Pool } from 'pg'
+import { Pool, PoolClient } from 'pg'
 import dotenv from 'dotenv'
+import path from 'path'
 
-dotenv.config({ path: '../.env.local' })
+// Use __dirname so this works regardless of where the process is started from
+// (e.g. Docker, monorepo scripts, or running ts-node from a different cwd)
+dotenv.config({ path: path.join(__dirname, '../../../.env.local') })
 
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is missing in .env.local')
@@ -9,17 +12,20 @@ if (!process.env.DATABASE_URL) {
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // Add SSL if needed for Supabase depending on node version and environment, but generally not required for dev if not strictly enforced.
-  // We'll leave it simple for now, but usually Supabase requires SSL.
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  // Prevent pool exhaustion under load — Supabase free tier allows ~15 concurrent connections
+  max: 10,
+  // Release idle connections after 30s to avoid holding Supabase connection slots unnecessarily
+  idleTimeoutMillis: 30_000,
+  // Fail fast if the pool is saturated rather than queuing indefinitely
+  connectionTimeoutMillis: 5_000,
 })
 
-export const query = (text: string, params?: any[], client?: any) => {
-  if (client) return client.query(text, params)
+export const query = (text: string, params?: unknown[]) => {
   return pool.query(text, params)
 }
 
-export const transaction = async <T>(callback: (client: any) => Promise<T>): Promise<T> => {
+export const transaction = async <T>(callback: (client: PoolClient) => Promise<T>): Promise<T> => {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')

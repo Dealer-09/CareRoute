@@ -38,7 +38,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
 
     res.json(result.rows[0])
   } catch (err) {
-    console.error('GET /api/profile error:', err)
+    console.error('GET /api/profile error:', err instanceof Error ? err.message : err)
     res.status(500).json({ error: 'Failed to load profile' })
   }
 })
@@ -84,7 +84,27 @@ router.patch('/', requireAuth, async (req: AuthRequest, res) => {
     )
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Profile not found' })
+      // Patient row missing (e.g. doctor role changed to patient, or signup transaction
+      // partially failed). Auto-create it, then apply the update.
+      const newPatient = await query(
+        'INSERT INTO patients (user_id, name) VALUES ($1, $2) RETURNING id',
+        [userId, parsed.name || '']
+      )
+      const patientId = newPatient.rows[0].id
+
+      // Re-run the update now that the row exists
+      const retryResult = await query(
+        `UPDATE patients SET ${fields.join(', ')}
+         WHERE user_id = $${idx}
+         RETURNING id, name, date_of_birth, gender, phone`,
+        values
+      )
+
+      await query(
+        'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',
+        [userId, 'UPDATE_PROFILE', 'patients', patientId]
+      )
+      return res.json(retryResult.rows[0])
     }
 
     // Audit

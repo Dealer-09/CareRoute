@@ -1,6 +1,5 @@
 "use client"
 import { BACKEND_URL } from '@/lib/api'
-
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, CalendarDays, Clock, MapPin, Phone, Loader2, X } from 'lucide-react'
@@ -10,7 +9,7 @@ type Appointment = {
   id: string
   status: 'confirmed' | 'cancelled' | 'completed'
   starts_at: string
-  notes: string | null
+  clinician_note: string | null
   doctor_name: string
   specialty: string
   location: string | null

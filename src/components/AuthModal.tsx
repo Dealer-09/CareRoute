@@ -82,8 +82,9 @@ export default function AuthModal({
 
       if (onLogin) onLogin(userType)
 
-      if (userType === 'patient') window.location.href = '/dashboard'
-      if (userType === 'provider') window.location.href = '/clinician'
+      if (data.user.role === 'admin') window.location.href = '/admin'
+      else if (data.user.role === 'doctor') window.location.href = '/clinician'
+      else window.location.href = '/dashboard'
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')

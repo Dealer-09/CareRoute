@@ -7,6 +7,7 @@ export type Severity = 'Green' | 'Amber' | 'Red'
  */
 export type TriageResult = {
   // Core assessment
+  id: string
   severity: Severity
   emergency: boolean           // true = emergency pre-check fired (bypassed LLM)
   condition_guess: string      // e.g. "Upper respiratory infection"

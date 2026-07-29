@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS patients (
   phone         TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE patients ADD COLUMN IF NOT EXISTS phone TEXT;
+
 
 
 -- ─── doctors ──────────────────────────────────────────────────────────────────
@@ -59,11 +59,14 @@ CREATE TABLE IF NOT EXISTS triage_cases (
   advice                TEXT,
   duration              TEXT,
   symptom_text          TEXT,
+  for_dependent_id      UUID        REFERENCES dependents(id) ON DELETE SET NULL,
+  for_name              TEXT,
   reviewed              BOOLEAN     NOT NULL DEFAULT FALSE,
   reviewed_by           UUID        REFERENCES users(id) ON DELETE SET NULL,
   reviewed_at           TIMESTAMPTZ,
   clinician_note        TEXT,
   confidence            INT,
+  decision_record       JSONB,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -140,6 +143,26 @@ CREATE TABLE IF NOT EXISTS follow_ups (
   UNIQUE (triage_case_id)
 );
 
+-- ─── drug_registry ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS drug_registry (
+  id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  active_ingredient   TEXT        NOT NULL UNIQUE,
+  is_banned_fdc       BOOLEAN     NOT NULL DEFAULT FALSE,
+  regulatory_source   TEXT,
+  last_verified_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ─── cdsco_ingestion_logs ──────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS cdsco_ingestion_logs (
+  id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  records_processed   INT         NOT NULL,
+  new_bans_detected   INT         NOT NULL,
+  status              TEXT        NOT NULL CHECK (status IN ('PENDING_HUMAN_APPROVAL', 'AUTO_APPROVED', 'FAILED')),
+  payload_hash        TEXT        NOT NULL,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 DO $$ BEGIN
   ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed          BOOLEAN     NOT NULL DEFAULT FALSE;
   ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed_by       UUID        REFERENCES users(id) ON DELETE SET NULL;
@@ -150,13 +173,10 @@ DO $$ BEGIN
   ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS confidence        INT;
   BEGIN
     ALTER TABLE follow_ups ADD CONSTRAINT follow_ups_triage_case_id_key UNIQUE (triage_case_id);
-  EXCEPTION WHEN OTHERS THEN NULL;
+  EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
   END;
   -- Drop the overly strict UNIQUE constraint on slot_id if it exists (replaced by partial index)
-  BEGIN
-    ALTER TABLE appointments DROP CONSTRAINT IF EXISTS appointments_slot_id_key;
-  EXCEPTION WHEN OTHERS THEN NULL;
-  END;
+  ALTER TABLE appointments DROP CONSTRAINT IF EXISTS appointments_slot_id_key;
   ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS bio               TEXT;
   ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS experience_yrs    INT;
   ALTER TABLE doctors      ADD COLUMN IF NOT EXISTS fee_inr           INT;
@@ -165,7 +185,14 @@ END $$;
 
 -- ─── Indexes — after migrations so all columns exist ──────────────────────────
 CREATE INDEX IF NOT EXISTS idx_patients_user_id            ON patients(user_id);
-CREATE INDEX IF NOT EXISTS idx_triage_cases_patient_id     ON triage_cases(patient_id);
+CREATE INDEX IF NOT EXISTS idx_doctors_user_id             ON doctors(user_id);
+CREATE INDEX IF NOT EXISTS idx_triage_cases_reviewed_by    ON triage_cases(reviewed_by);
+CREATE INDEX IF NOT EXISTS idx_triage_cases_for_dependent_id ON triage_cases(for_dependent_id);
+CREATE INDEX IF NOT EXISTS idx_documents_patient_id        ON documents(patient_id);
+CREATE INDEX IF NOT EXISTS idx_documents_triage_case_id    ON documents(triage_case_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_triage_case_id ON appointments(triage_case_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_slot_id        ON appointments(slot_id);
+CREATE INDEX IF NOT EXISTS idx_follow_ups_patient_id       ON follow_ups(patient_id);
 CREATE INDEX IF NOT EXISTS idx_triage_cases_severity       ON triage_cases(severity);
 CREATE INDEX IF NOT EXISTS idx_triage_cases_created_at     ON triage_cases(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_triage_cases_reviewed       ON triage_cases(reviewed);

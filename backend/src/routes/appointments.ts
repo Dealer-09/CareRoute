@@ -97,7 +97,9 @@ appointmentRouter.post('/', requireAuth, async (req: AuthRequest, res) => {
   } catch (err: any) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message })
     if (err.message === 'Slot not found') return res.status(404).json({ error: err.message })
-    if (err.message === 'Slot already booked. Please choose another.') return res.status(409).json({ error: err.message })
+    if (err.message === 'Slot already booked. Please choose another.' || err.code === '23505') {
+      return res.status(409).json({ error: 'Slot already booked' })
+    }
     console.error('POST /appointments error:', err)
     res.status(500).json({ error: 'Internal server error' })
   }

@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import {
   Users, Activity, FileText, CalendarDays, AlertTriangle,
   ShieldCheck, Search, ChevronDown, Trash2, Loader2,
-  LayoutDashboard, ScrollText, UserCog, RefreshCw,
+  LayoutDashboard, ScrollText, UserCog, RefreshCw, ClipboardList
 } from 'lucide-react'
 import { timeAgo } from '@/lib/utils'
 
@@ -34,6 +34,12 @@ type RecentCase = {
   id: string; severity: string; emergency: boolean
   condition_guess: string; summary: string
   reviewed: boolean; created_at: string; patient_name: string
+}
+
+type DecisionCase = {
+  id: string; severity: string; emergency: boolean
+  decision_record: any; created_at: string
+  patient_name: string; patient_email: string
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -66,7 +72,7 @@ function StatCard({ label, value, icon: Icon, color }: { label: string; value: n
 }
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
-type Tab = 'overview' | 'users' | 'audit'
+type Tab = 'overview' | 'users' | 'audit' | 'compliance'
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -81,7 +87,8 @@ export default function AdminPanel() {
     const raw = localStorage.getItem('careRouteUser')
     if (!raw || !token) { router.replace('/'); return }
     try {
-      const u = JSON.parse(raw)
+      // Decode role from JWT token payload for defense-in-depth against client-side localStorage spoofing
+      const u = JSON.parse(atob(token.split('.')[1]))
       if (u.role !== 'admin') { router.replace('/'); return }
       setReady(true)
     } catch { router.replace('/') }
@@ -106,6 +113,12 @@ export default function AdminPanel() {
 
   // ── Recent cases ──
   const [recent,        setRecent]       = useState<RecentCase[]>([])
+
+  // ── Compliance ──
+  const [decisions,         setDecisions]        = useState<DecisionCase[]>([])
+  const [decisionsLoading,  setDecisionsLoading] = useState(false)
+  const [decisionsSeverity, setDecisionsSeverity]= useState('')
+  const [expandedDecision,  setExpandedDecision] = useState<string | null>(null)
 
   const api = useCallback(async (path: string, opts?: RequestInit) => {
     const res = await fetch(`${BACKEND_URL}/api/admin${path}`, {
@@ -146,6 +159,16 @@ export default function AdminPanel() {
       .finally(() => setAuditLoading(false))
   }, [ready, tab, auditFilter, api])
 
+  // Load compliance decisions
+  useEffect(() => {
+    if (!ready || tab !== 'compliance') return
+    setDecisionsLoading(true)
+    api(`/compliance/decisions?severity=${encodeURIComponent(decisionsSeverity)}&limit=50`)
+      .then(d => setDecisions(d.decisions))
+      .catch(console.error)
+      .finally(() => setDecisionsLoading(false))
+  }, [ready, tab, decisionsSeverity, api])
+
   async function changeRole(userId: string, newRole: string) {
     setRoleChanging(userId)
     try {
@@ -153,12 +176,11 @@ export default function AdminPanel() {
         method: 'PATCH', body: JSON.stringify({ role: newRole }),
       })
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: updated.role } : u))
-    } catch (e) { alert('Failed to change role') }
+    } catch { alert('Failed to change role') }
     finally { setRoleChanging(null) }
   }
 
-  async function deleteUser(userId: string, email: string) {
-    if (!confirm(`Permanently delete ${email}? This cannot be undone.`)) return
+  async function deleteUser(userId: string, _email: string) {
     setDeleting(userId)
     try {
       await api(`/users/${userId}`, { method: 'DELETE' })
@@ -199,9 +221,10 @@ export default function AdminPanel() {
         {/* Tab bar */}
         <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 mb-8 w-fit">
           {([
-            { id: 'overview', label: 'Overview',     icon: LayoutDashboard },
-            { id: 'users',    label: 'Users',         icon: UserCog },
-            { id: 'audit',    label: 'Audit Log',     icon: ScrollText },
+            { id: 'overview',   label: 'Overview',     icon: LayoutDashboard },
+            { id: 'users',      label: 'Users',         icon: UserCog },
+            { id: 'audit',      label: 'Audit Log',     icon: ScrollText },
+            { id: 'compliance', label: 'CDSCO Records', icon: ClipboardList },
           ] as { id: Tab; label: string; icon: React.ElementType }[]).map(t => (
             <button
               key={t.id}
@@ -354,14 +377,21 @@ export default function AdminPanel() {
                               }
                             </div>
                             {/* Delete */}
-                            <button
-                              onClick={() => deleteUser(u.id, u.email)}
-                              disabled={deleting === u.id}
-                              className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
-                              title="Delete user"
-                            >
-                              {deleting === u.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                            </button>
+                            {deleting === u.id + '_confirm' ? (
+                              <div className="flex items-center gap-1">
+                                <button onClick={() => deleteUser(u.id, u.email)} className="text-[10px] bg-red-500 text-white px-2 py-1 rounded">Sure?</button>
+                                <button onClick={() => setDeleting(null)} className="text-[10px] bg-slate-200 text-slate-700 px-2 py-1 rounded">Cancel</button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeleting(u.id + '_confirm')}
+                                disabled={deleting === u.id}
+                                className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                                title="Delete user"
+                              >
+                                {deleting === u.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -432,6 +462,74 @@ export default function AdminPanel() {
                 </table>
                 {audit.length === 0 && (
                   <p className="text-center text-slate-400 py-8 text-sm">No audit entries found</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        {/* ─── Compliance Log ────────────────────────────────────────────────── */}
+        {tab === 'compliance' && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="font-bold text-slate-800">CDSCO Decision Records</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Immutable audit trail of all AI triage decisions.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={decisionsSeverity}
+                  onChange={e => setDecisionsSeverity(e.target.value)}
+                  className="px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">All Severities</option>
+                  <option value="Red">Red (Emergency)</option>
+                  <option value="Amber">Amber (Urgent)</option>
+                  <option value="Green">Green (Routine)</option>
+                </select>
+                <button
+                  onClick={() => setDecisionsSeverity('')}
+                  className="p-2 rounded-lg border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors"
+                  title="Refresh"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              </div>
+            </div>
+
+            {decisionsLoading ? (
+              <div className="flex items-center gap-2 text-slate-400 py-8 justify-center">
+                <Loader2 size={18} className="animate-spin" /> Loading records…
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {decisions.map(d => (
+                  <div key={d.id} className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                    <div 
+                      className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                      onClick={() => setExpandedDecision(expandedDecision === d.id ? null : d.id)}
+                    >
+                      <div className="flex items-center gap-4">
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${severityColor(d.severity)}`}>
+                          {d.emergency ? '🚨' : ''} {d.severity}
+                        </span>
+                        <div>
+                          <div className="font-semibold text-slate-800">{d.patient_name} <span className="text-slate-400 font-normal text-sm">({d.patient_email})</span></div>
+                          <div className="text-xs text-slate-500 mt-0.5">{new Date(d.created_at).toLocaleString()} • Case #{d.id.split('-')[0]}</div>
+                        </div>
+                      </div>
+                      <ChevronDown size={18} className={`text-slate-400 transition-transform ${expandedDecision === d.id ? 'rotate-180' : ''}`} />
+                    </div>
+                    {expandedDecision === d.id && (
+                      <div className="border-t border-slate-100 bg-slate-900 p-4 overflow-x-auto text-slate-300">
+                        <pre className="text-[11px] font-mono leading-relaxed">
+                          {JSON.stringify(d.decision_record, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {decisions.length === 0 && (
+                  <p className="text-center text-slate-400 py-8 text-sm">No decision records found</p>
                 )}
               </div>
             )}

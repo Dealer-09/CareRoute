@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CareRoute AI",
-  description: "AI-Powered Healthcare Triage",
+  title: "CareRoute",
+  description: "Medical Healthcare Triage",
 };
 
 export default function RootLayout({

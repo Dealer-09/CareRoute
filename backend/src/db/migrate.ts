@@ -12,6 +12,6 @@ export async function runMigrations() {
     console.log('✅ Database schema is up to date.')
   } catch (error) {
     console.error('❌ Migration failed:', error)
-    process.exit(1)
+    throw error
   }
 }

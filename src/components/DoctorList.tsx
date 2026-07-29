@@ -37,7 +37,7 @@ export default function DoctorList({ specialty, triageCaseId }: Props) {
         )
         if (!res.ok) throw new Error()
         const data = await res.json()
-        setDoctors(data.doctors.length > 0 ? data.doctors : await fallbackGeneralMedicine())
+        setDoctors(data?.doctors?.length > 0 ? data.doctors : await fallbackGeneralMedicine())
       } catch {
         setDoctors([])
       } finally {
@@ -49,7 +49,7 @@ export default function DoctorList({ specialty, triageCaseId }: Props) {
       const res = await fetch(`${BACKEND_URL}/api/doctors?specialty=General Medicine`)
       if (!res.ok) return []
       const data = await res.json()
-      return data.doctors
+      return data?.doctors ?? []
     }
 
     load()
@@ -141,7 +141,7 @@ export default function DoctorList({ specialty, triageCaseId }: Props) {
           doctorName={pickingFor.name}
           feeInr={pickingFor.fee_inr}
           triageCaseId={triageCaseId}
-          onBooked={(_, startsAt) => {
+          onBooked={(_, _startsAt) => {
             setBookedIds(prev => new Set(prev).add(pickingFor.id))
             setPickingFor(null)
           }}

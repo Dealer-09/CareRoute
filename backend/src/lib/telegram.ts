@@ -18,25 +18,29 @@ export type AlertPayload = {
   triageCaseId: string
 }
 
+function escapeHTML(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')
+}
+
 function buildMessage(p: AlertPayload): string {
   const flag   = p.emergency ? '🚨' : '🔴'
   const badge  = p.emergency ? 'EMERGENCY' : 'RED — HIGH PRIORITY'
-  const flags  = p.redFlags.length > 0 ? p.redFlags.map(f => `  • ${f}`).join('\n') : '  None'
+  const flags  = p.redFlags.length > 0 ? p.redFlags.map(f => `  • ${escapeHTML(f)}`).join('\n') : '  None'
 
   return [
     `${flag} <b>CareRoute Alert — ${badge}</b>`,
     '',
-    `<b>Patient:</b> ${p.patientName}`,
-    `<b>Condition:</b> ${p.conditionGuess}`,
-    `<b>Specialty:</b> ${p.recommendedSpecialty}`,
+    `<b>Patient:</b> ${escapeHTML(p.patientName)}`,
+    `<b>Condition:</b> ${escapeHTML(p.conditionGuess)}`,
+    `<b>Specialty:</b> ${escapeHTML(p.recommendedSpecialty)}`,
     '',
     `<b>Summary:</b>`,
-    p.summary,
+    escapeHTML(p.summary),
     '',
     `<b>Red Flags:</b>`,
     flags,
     '',
-    `<b>Case ID:</b> <code>${p.triageCaseId}</code>`,
+    `<b>Case ID:</b> <code>${escapeHTML(p.triageCaseId)}</code>`,
     `<i>Review immediately in the clinician dashboard.</i>`,
   ].join('\n')
 }

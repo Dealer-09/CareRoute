@@ -34,8 +34,12 @@ router.get('/nearest-er', async (req, res) => {
     return res.status(400).json({ error: 'lat and lng must be numbers' })
   }
 
+  if (latN < -90 || latN > 90 || lngN < -180 || lngN > 180) {
+    return res.status(400).json({ error: 'Coordinates out of bounds' })
+  }
+
   // Overpass QL: hospitals within 5 km, nodes + ways (some hospitals are mapped as areas)
-  const query = `
+  const overpassQuery = `
     [out:json][timeout:15];
     (
       node["amenity"="hospital"](around:5000,${latN},${lngN});
@@ -48,7 +52,7 @@ router.get('/nearest-er', async (req, res) => {
     const apiRes = await fetch(OVERPASS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `data=${encodeURIComponent(query)}`,
+      body: `data=${encodeURIComponent(overpassQuery)}`,
     })
 
     if (!apiRes.ok) {
