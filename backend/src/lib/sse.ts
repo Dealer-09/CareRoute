@@ -12,6 +12,7 @@ const connections = new Set<Response>()
 export function addConnection(res: Response): void {
   if (!res.destroyed && !res.writableEnded) {
     connections.add(res)
+    res.on('error', () => removeConnection(res))
   }
 }
 

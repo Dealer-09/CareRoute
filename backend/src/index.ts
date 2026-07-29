@@ -4,6 +4,7 @@ import dotenv from 'dotenv'
 import path from 'path'
 import rateLimit from 'express-rate-limit'
 import { runMigrations } from './db/migrate'
+import { pool } from './db/connection'
 import healthRoutes from './routes/health'
 import authRoutes from './routes/auth'
 import triageRoutes from './routes/triage'
@@ -35,17 +36,12 @@ if (!process.env.DATABASE_URL) {
 }
 
 const app = express()
+app.set('trust proxy', 1)
 const PORT = process.env.PORT || 4000
 
 // Middleware
 app.use(cors({ origin: process.env.ALLOWED_ORIGIN || 'http://localhost:3000', credentials: true }))
 app.use(express.json())
-app.use((err: any, req: any, res: any, next: any) => {
-  if (err instanceof SyntaxError && 'body' in err) {
-    return res.status(400).json({ error: 'Invalid JSON' })
-  }
-  next()
-})
 
 // ── Rate limiting ────────────────────────────────────────────────────────────
 // Auth routes have their own tighter limiter (10/15 min) defined in auth.ts.
@@ -81,7 +77,7 @@ const generalLimiter = rateLimit({
 // Routes
 app.use('/api/health', healthRoutes)
 app.use('/api/auth', authRoutes)                              // has its own authLimiter (10/15 min)
-app.use('/api/triage', triageLimiter, triageRoutes)
+app.use('/api/triage', triageRoutes)   // triageLimiter applied per-route on POST /save only
 app.use('/api/profile', generalLimiter, profileRoutes)
 app.use('/api/documents', generalLimiter, documentRoutes)
 app.use('/api/maps', mapsLimiter, mapsRoutes)
@@ -89,6 +85,15 @@ app.use('/api/doctors', generalLimiter, doctorRouter)
 app.use('/api/appointments', generalLimiter, appointmentRouter)
 app.use('/api/admin', generalLimiter, adminRoutes)
 app.use('/api/dependents', generalLimiter, dependentRoutes)
+
+// Global Error Handler
+app.use((err: any, req: any, res: any, next: any) => {
+  if (err instanceof SyntaxError && 'body' in err) {
+    return res.status(400).json({ error: 'Invalid JSON' })
+  }
+  console.error('Unhandled Route Error:', err)
+  res.status(500).json({ error: 'Internal server error' })
+})
 
 async function startServer() {
   console.log('🚀 Starting CareRoute backend...')
@@ -114,7 +119,8 @@ async function startServer() {
     console.log(`\n[shutdown] ${signal} received — shutting down gracefully`)
     stopHeartbeat()
     stopFollowUpScheduler()
-    server.close(() => {
+    server.close(async () => {
+      await pool.end().catch(() => {})
       console.log('[shutdown] HTTP server closed')
       process.exit(0)
     })

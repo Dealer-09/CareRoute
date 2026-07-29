@@ -74,6 +74,10 @@ export default function AuthModal({
         throw new Error(data.error || 'Authentication failed')
       }
 
+      if (!data.token || !data.user) {
+        throw new Error('Invalid response from server')
+      }
+
       // Save token
       if (typeof window !== 'undefined') {
         localStorage.setItem('careRouteToken', data.token)

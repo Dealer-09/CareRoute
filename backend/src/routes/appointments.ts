@@ -77,6 +77,7 @@ appointmentRouter.post('/', requireAuth, async (req: AuthRequest, res) => {
       )
       if (slotRes.rows.length === 0) throw new Error('Slot not found')
       if (slotRes.rows[0].is_booked)  throw new Error('Slot already booked. Please choose another.')
+      if (new Date(slotRes.rows[0].starts_at) <= new Date()) throw new Error('Cannot book a slot in the past.')
 
       const apptRes = await client.query(
         `INSERT INTO appointments (patient_id, doctor_id, slot_id, triage_case_id, notes)
@@ -97,6 +98,7 @@ appointmentRouter.post('/', requireAuth, async (req: AuthRequest, res) => {
   } catch (err: any) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: err.errors[0].message })
     if (err.message === 'Slot not found') return res.status(404).json({ error: err.message })
+    if (err.message === 'Cannot book a slot in the past.') return res.status(400).json({ error: err.message })
     if (err.message === 'Slot already booked. Please choose another.' || err.code === '23505') {
       return res.status(409).json({ error: 'Slot already booked' })
     }

@@ -222,30 +222,28 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
 
         // Phase 0: Save to DB if logged in
         if (token) {
-          try {
-            await fetch(`${BACKEND_URL}/api/triage/save`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({
-                ...withMeta,
-                symptom_text:     text,
-                for_dependent_id: selectedFor !== 'self' ? selectedFor.id   : undefined,
-                for_name:         selectedFor !== 'self' ? selectedFor.name  : undefined,
-                vitals: {
-                  heartRateBpm: heartRate ? parseInt(heartRate) || undefined : undefined,
-                  spo2Percent: spo2 ? parseInt(spo2) || undefined : undefined,
-                  temperatureCelsius: temperature ? parseFloat(temperature) || undefined : undefined,
-                  systolicBp: bloodPressure?.includes('/') ? parseInt(bloodPressure.split('/')[0]) || undefined : undefined,
-                  diastolicBp: bloodPressure?.includes('/') ? parseInt(bloodPressure.split('/')[1]) || undefined : undefined,
-                }
-              })
-
+          const saveRes = await fetch(`${BACKEND_URL}/api/triage/save`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              ...withMeta,
+              symptom_text:     text,
+              for_dependent_id: selectedFor !== 'self' ? selectedFor.id   : undefined,
+              for_name:         selectedFor !== 'self' ? selectedFor.name  : undefined,
+              vitals: {
+                heartRateBpm: heartRate ? parseInt(heartRate) || undefined : undefined,
+                spo2Percent: spo2 ? parseInt(spo2) || undefined : undefined,
+                temperatureCelsius: temperature ? parseFloat(temperature) || undefined : undefined,
+                systolicBp: bloodPressure?.includes('/') ? parseInt(bloodPressure.split('/')[0]) || undefined : undefined,
+                diastolicBp: bloodPressure?.includes('/') ? parseInt(bloodPressure.split('/')[1]) || undefined : undefined,
+              }
             })
-          } catch (e) {
-            console.error('Failed to save to DB, but local analysis completed', e)
+          })
+          if (!saveRes.ok) {
+            throw new Error('Failed to save triage case to database')
           }
         }
       } catch (err) {

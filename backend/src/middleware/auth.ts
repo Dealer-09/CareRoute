@@ -5,9 +5,8 @@ export interface AuthRequest extends Request {
   user?: { id: string; role: string }
 }
 
-const secret = process.env.JWT_SECRET
-
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
+  const secret = process.env.JWT_SECRET
   if (!secret) {
     console.error('JWT_SECRET is missing')
     return res.status(500).json({ error: 'Internal server error' })

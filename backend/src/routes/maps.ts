@@ -23,7 +23,7 @@ type OverpassResponse = {
 router.get('/nearest-er', async (req, res) => {
   const { lat, lng } = req.query
 
-  if (!lat || !lng) {
+  if (lat === undefined || lat === null || lat === '' || lng === undefined || lng === null || lng === '') {
     return res.status(400).json({ error: 'lat and lng query params required' })
   }
 
@@ -45,7 +45,7 @@ router.get('/nearest-er', async (req, res) => {
       node["amenity"="hospital"](around:5000,${latN},${lngN});
       way["amenity"="hospital"](around:5000,${latN},${lngN});
     );
-    out center 8;
+    out center 20;
   `
 
   try {

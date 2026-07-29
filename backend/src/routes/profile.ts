@@ -29,7 +29,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
     if (result.rows.length === 0) {
       // Patient profile missing — create a blank one and return it
       const newPatient = await query(
-        'INSERT INTO patients (user_id, name) VALUES ($1, $2) RETURNING id, name, date_of_birth, gender',
+        'INSERT INTO patients (user_id, name) VALUES ($1, $2) RETURNING id, name, date_of_birth, gender, phone',
         [userId, '']
       )
       const userRow = await query('SELECT email, role FROM users WHERE id = $1', [userId])

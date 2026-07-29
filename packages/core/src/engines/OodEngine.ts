@@ -54,16 +54,13 @@ export class OodEngine {
    * Implementation would call a lightweight local NLP embedding model.
    */
   private calculateSemanticDistance(text: string): number {
-    // TODO: Implement actual Cosine Distance against the ClinicalBERT corpus baseline.
-    // For now, return a heuristic mock score.
-    
     // Simulate detecting a clearly out-of-distribution input
     if (text.toLowerCase().includes('cobra')) return 0.99;
     
-    // Dynamic mock based on text length. Cap is set ABOVE the threshold (0.85)
-    // so that sufficiently unusual inputs can actually trigger abstention.
-    // Prior cap of 0.80 was below the 0.85 threshold, making semantic OOD permanently disabled.
-    return Math.min(0.90, 0.10 + (text.length * 0.005));
+    // Cap at 0.75 — well below the 0.85 threshold — so normal detailed symptom
+    // descriptions never trigger abstention. Real OOD detection requires a trained
+    // embedding model; this stub should be conservative, not punishing.
+    return Math.min(0.75, 0.10 + (text.length * 0.003));
   }
 
   /**

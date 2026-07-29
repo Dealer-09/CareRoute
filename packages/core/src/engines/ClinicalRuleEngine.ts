@@ -26,7 +26,9 @@ const AMBER_TEXT_PATTERNS: Array<{ keywords: string[]; reason: string }> = [
     reason: 'Sudden severe headache — subarachnoid haemorrhage not excluded',
   },
   {
-    keywords: ['can\'t breathe', 'cannot breathe', 'unable to breathe', 'no air', 'gasping'],
+    keywords: ['can\'t breathe', 'cannot breathe', 'unable to breathe', 'no air', 'gasping',
+               'shortness of breath', 'short of breath', 'trouble breathing', 'difficulty breathing',
+               'hard to breathe', 'breathless', 'breathlessness', 'out of breath'],
     reason: 'Severe dyspnoea described in free text',
   },
   {
@@ -78,6 +80,11 @@ export class ClinicalRuleEngine {
 
     // ── 2. Vital-sign Amber rules ──
 
+    // Very high fever (≥ 39.5°C) is urgent regardless of duration
+    if (patient.vitals.temperatureCelsius && patient.vitals.temperatureCelsius >= 39.5) {
+      return { action: 'Amber', reason: 'High fever (≥ 39.5°C) — urgent evaluation required' };
+    }
+
     // Fever > 38.5°C for more than 3 days
     if (patient.vitals.temperatureCelsius && patient.vitals.temperatureCelsius > 38.5 && patient.symptomDurationHours > 72) {
       return { action: 'Amber', reason: 'High fever persisting > 72 hours' };
@@ -88,6 +95,11 @@ export class ClinicalRuleEngine {
       return { action: 'Amber', reason: 'Elevated heart rate > 110 bpm' };
     }
 
+    // Borderline bradycardia (SafetyEngine catches < 40 as RED; 40-50 is Amber)
+    if (patient.vitals.heartRateBpm && patient.vitals.heartRateBpm >= 40 && patient.vitals.heartRateBpm < 50) {
+      return { action: 'Amber', reason: 'Borderline bradycardia (40–50 bpm)' };
+    }
+
     // Borderline SpO2 (90–94% — below 90% is RED in SafetyEngine)
     if (patient.vitals.spo2Percent && patient.vitals.spo2Percent >= 90 && patient.vitals.spo2Percent <= 94) {
       return { action: 'Amber', reason: 'Borderline SpO2 (90–94%)' };
@@ -96,6 +108,16 @@ export class ClinicalRuleEngine {
     // Stage 2 hypertension
     if (patient.vitals.systolicBp && patient.vitals.systolicBp >= 160) {
       return { action: 'Amber', reason: 'Severe hypertension (Systolic ≥ 160)' };
+    }
+
+    // Elevated diastolic (≥ 100 is stage 2 hypertensive crisis regardless of systolic)
+    if (patient.vitals.diastolicBp && patient.vitals.diastolicBp >= 100) {
+      return { action: 'Amber', reason: 'Severe diastolic hypertension (Diastolic ≥ 100)' };
+    }
+
+    // Hypothermia (SafetyEngine rejects < 20°C as impossible; 35°C is clinical hypothermia threshold)
+    if (patient.vitals.temperatureCelsius && patient.vitals.temperatureCelsius < 35) {
+      return { action: 'Amber', reason: 'Hypothermia risk (Temperature < 35°C)' };
     }
 
     // ── 3. Duration rule ──

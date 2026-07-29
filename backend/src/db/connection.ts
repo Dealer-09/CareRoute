@@ -21,6 +21,11 @@ export const pool = new Pool({
   connectionTimeoutMillis: 5_000,
 })
 
+// Prevent Node crash on unexpected Postgres connection drops
+pool.on('error', (err) => {
+  console.error('[db] Unexpected pool client error:', err.message)
+})
+
 export const query = (text: string, params?: unknown[]) => {
   return pool.query(text, params)
 }

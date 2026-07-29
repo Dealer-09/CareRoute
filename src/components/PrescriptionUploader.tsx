@@ -6,6 +6,21 @@ import { UploadCloud, FileImage, Loader2, CheckCircle2, AlertCircle, X, BrainCir
 // TensorFlow static imports removed to prevent Turbopack build crash
 // We will dynamically load them at runtime in the browser instead.
 
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => i === 0 ? j : j === 0 ? i : 0)
+  )
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i-1] === b[j-1]
+        ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])
+    }
+  }
+  return dp[m][n]
+}
+
 type Props = {
   onExtraction: (text: string) => void
   onFileSelect: (file: File) => void
@@ -23,6 +38,8 @@ export const PrescriptionUploader: React.FC<Props> = ({ onExtraction, onFileSele
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TFLite model has no public TS types
   const modelRef = useRef<any>(null)
   const tokenizerRef = useRef<string[] | null>(null)
+  const dictionaryRef = useRef<string[]>([])
+  const prefixIndexRef = useRef<Map<string, string[]>>(new Map())
   // Track whether we've already attempted to load the model (avoid repeat attempts)
   const modelLoadAttempted = useRef(false)
 
@@ -44,13 +61,39 @@ export const PrescriptionUploader: React.FC<Props> = ({ onExtraction, onFileSele
       await tf.setBackend('webgl')
       await tf.ready()
       
-      const [tfLiteModel, tokenizerResp] = await Promise.all([
+      const [tfLiteModel, tokenizerResp, dictResp] = await Promise.all([
         tflite.loadTFLiteModel('/models/rx_ocr_quantized.tflite'),
-        fetch('/models/tokenizer.json').then(r => r.json())
+        fetch('/models/tokenizer.json').then(r => r.json()),
+        fetch('/models/drug_dictionary.json')
+          .then(r => r.ok ? r.json() : [])
+          .catch(() => [])
       ])
       
       modelRef.current = tfLiteModel
-      tokenizerRef.current = tokenizerResp.model.vocab.map(([token]: [string, number]) => token)
+
+      // Build vocab: base model.vocab + added_tokens (special tokens like <s_drug> live here)
+      // Without merging added_tokens, structured output tags decode to undefined and the
+      // regex finds 0 drug names — the entire OCR pipeline silently fails.
+      const baseVocab: string[] = tokenizerResp.model.vocab.map(([token]: [string, number]) => token)
+      const addedTokens: Array<{ id: number; content: string }> = tokenizerResp.added_tokens ?? []
+      const mergedVocab = [...baseVocab]
+      for (const t of addedTokens) {
+        mergedVocab[t.id] = t.content
+      }
+      tokenizerRef.current = mergedVocab
+
+      const drugs = Array.isArray(dictResp) ? dictResp : []
+      dictionaryRef.current = drugs
+      
+      // Build O(1) prefix index (group by first 2 chars)
+      const index = new Map<string, string[]>()
+      for (const drug of drugs) {
+        if (typeof drug !== 'string' || drug.length < 2) continue
+        const prefix = drug.toLowerCase().slice(0, 2)
+        if (!index.has(prefix)) index.set(prefix, [])
+        index.get(prefix)!.push(drug)
+      }
+      prefixIndexRef.current = index
       
       return true
     } catch (err) {
@@ -79,6 +122,7 @@ export const PrescriptionUploader: React.FC<Props> = ({ onExtraction, onFileSele
            img.onload = () => resolve()
            img.onerror = () => resolve()
          })
+         URL.revokeObjectURL(img.src)
          
          const tf = await (new Function("return import('@tensorflow/tfjs-core')"))();
          
@@ -127,7 +171,26 @@ export const PrescriptionUploader: React.FC<Props> = ({ onExtraction, onFileSele
          // Normalize subword boundaries in tags
          decodedText = decodedText.replace(/< s _ /g, '<s_').replace(/ >/g, '>')
 
-         const drugs = [...decodedText.matchAll(/<s_drug>(.*?)<\/s_drug>/g)].map(m => m[1].trim())
+         const rawDrugs = [...decodedText.matchAll(/<s_drug>(.*?)<\/s_drug>/g)].map(m => m[1].trim())
+         
+         // Tata 1mg Fuzzy Corrector (Prefix-Optimized)
+         const drugs = rawDrugs.map(raw => {
+           if (!raw) return raw
+           let best = raw
+           let bestDist = Infinity
+           const prefix = raw.toLowerCase().slice(0, 2)
+           
+           // Only search within the matching prefix bucket (a few hundred instead of 300k)
+           const candidates = prefixIndexRef.current.get(prefix) || []
+           
+           for (const name of candidates) {
+             const d = levenshtein(raw.toLowerCase(), name.toLowerCase())
+             if (d < bestDist) { bestDist = d; best = name }
+           }
+           
+           // Only snap if distance is <= 3 to prevent weird hallucinations
+           return bestDist <= 3 ? best : raw
+         })
 
          if (drugs.length > 0) {
            onExtraction(`Extracted medications:\n${drugs.map(d => `- ${d}`).join('\n')}`)
@@ -170,6 +233,7 @@ export const PrescriptionUploader: React.FC<Props> = ({ onExtraction, onFileSele
 
   const clearFile = () => {
     setFile(null)
+    if (preview) URL.revokeObjectURL(preview)
     setPreview(null)
     setStatus('idle')
     if (fileInputRef.current) fileInputRef.current.value = ''

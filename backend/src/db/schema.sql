@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- ─── patients ─────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS patients (
   id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id       UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id       UUID        NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
   name          TEXT,
   date_of_birth DATE,
   gender        TEXT        CHECK (gender IN ('M', 'F', 'Other')),
@@ -42,6 +42,18 @@ CREATE TABLE IF NOT EXISTS doctors (
   rating         NUMERIC(3,1),
   available      BOOLEAN     NOT NULL DEFAULT TRUE,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ─── dependents ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS dependents (
+  id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name          TEXT        NOT NULL,
+  date_of_birth DATE,
+  gender        TEXT        CHECK (gender IN ('M', 'F', 'Other')),
+  relationship  TEXT        NOT NULL DEFAULT 'Child'
+                            CHECK (relationship IN ('Child', 'Parent', 'Spouse', 'Sibling', 'Other')),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ─── triage_cases ─────────────────────────────────────────────────────────────
@@ -119,18 +131,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_appointments_slot_active
   ON appointments (slot_id)
   WHERE status != 'cancelled';
 
--- ─── dependents ──────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS dependents (
-  id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id       UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name          TEXT        NOT NULL,
-  date_of_birth DATE,
-  gender        TEXT        CHECK (gender IN ('M', 'F', 'Other')),
-  relationship  TEXT        NOT NULL DEFAULT 'Child'
-                            CHECK (relationship IN ('Child', 'Parent', 'Spouse', 'Sibling', 'Other')),
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 -- ─── follow_ups ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS follow_ups (
   id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -143,27 +143,8 @@ CREATE TABLE IF NOT EXISTS follow_ups (
   UNIQUE (triage_case_id)
 );
 
--- ─── drug_registry ─────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS drug_registry (
-  id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  active_ingredient   TEXT        NOT NULL UNIQUE,
-  is_banned_fdc       BOOLEAN     NOT NULL DEFAULT FALSE,
-  regulatory_source   TEXT,
-  last_verified_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- ─── cdsco_ingestion_logs ──────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS cdsco_ingestion_logs (
-  id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  records_processed   INT         NOT NULL,
-  new_bans_detected   INT         NOT NULL,
-  status              TEXT        NOT NULL CHECK (status IN ('PENDING_HUMAN_APPROVAL', 'AUTO_APPROVED', 'FAILED')),
-  payload_hash        TEXT        NOT NULL,
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 DO $$ BEGIN
+  ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS decision_record JSONB;
   ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed          BOOLEAN     NOT NULL DEFAULT FALSE;
   ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed_by       UUID        REFERENCES users(id) ON DELETE SET NULL;
   ALTER TABLE triage_cases ADD COLUMN IF NOT EXISTS reviewed_at       TIMESTAMPTZ;
@@ -185,6 +166,7 @@ END $$;
 
 -- ─── Indexes — after migrations so all columns exist ──────────────────────────
 CREATE INDEX IF NOT EXISTS idx_patients_user_id            ON patients(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_patients_user_id_unique ON patients(user_id);
 CREATE INDEX IF NOT EXISTS idx_doctors_user_id             ON doctors(user_id);
 CREATE INDEX IF NOT EXISTS idx_triage_cases_reviewed_by    ON triage_cases(reviewed_by);
 CREATE INDEX IF NOT EXISTS idx_triage_cases_for_dependent_id ON triage_cases(for_dependent_id);

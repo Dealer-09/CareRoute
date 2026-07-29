@@ -85,7 +85,12 @@ export default function Dashboard() {
       const storedUser = localStorage.getItem('careRouteUser')
       
       if (storedUser) {
-        setUser(JSON.parse(storedUser))
+        try {
+          setUser(JSON.parse(storedUser))
+        } catch {
+          // Corrupted localStorage — clear it to prevent permanent white screen
+          localStorage.removeItem('careRouteUser')
+        }
       }
 
       if (token) {

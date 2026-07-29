@@ -59,6 +59,9 @@ public/models/*.tflite
 public/models/tokenizer.json
 public/models/special_tokens_map.json
 public/models/tokenizer_config.json
+# drug_dictionary.json is generated from the Tata 1mg Kaggle dataset
+# Run the extraction script and place the output here
+public/models/drug_dictionary.json
 
 # ─── Training scripts — Kaggle notebook artifacts, not part of the app ────────
 train.py
@@ -76,3 +79,6 @@ audit_part5.txt
 audit_report_extracted.txt
 scratch_search.js
 scratch_transcript_search.txt
+audit_final_sweep.md
+full_architecture_audit.md
+plan.md

@@ -19,6 +19,15 @@ export class TriagePipeline {
   public async execute(patient: PatientPresentation): Promise<DecisionRecord> {
     const timestamp = new Date().toISOString();
 
+    // Age guard — catch NaN/impossible ages before any engine runs
+    if (isNaN(patient.age) || patient.age < 0 || patient.age > 130) {
+      const err = Object.assign(new Error(`Invalid patient age: ${patient.age}`), {
+        code: 'INVALID_PATIENT_DATA' as const,
+        ruleTriggered: 'PLAUSIBILITY_AGE'
+      })
+      throw err
+    }
+
     // 1. ENGINE 4: Deterministic Safety Gateway
     const safetyResult = this.safetyEngine.evaluate(patient);
     
@@ -41,7 +50,9 @@ export class TriagePipeline {
 
     if (oodResult.action === 'ABSTAIN') {
       return this.generateAuditRecord(
-        patient, timestamp, 'ESCALATED', true, oodResult.reason, [], oodResult.score, (oodResult.oodType === 'TABULAR' ? oodResult.score : 0)
+        patient, timestamp, 'ESCALATED', true, oodResult.reason, [],
+        oodResult.oodType === 'SEMANTIC' ? oodResult.score : 0,
+        oodResult.oodType === 'TABULAR'  ? oodResult.score : 0
       );
     }
 

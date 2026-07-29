@@ -59,6 +59,10 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res) => {
     const data = dependentSchema.partial().parse(req.body)
     const { id } = req.params
 
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(400).json({ error: 'Invalid ID format' })
+    }
+
     const updates: string[] = []
     const values: unknown[] = []
     let i = 1
@@ -106,6 +110,10 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res) => {
 router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
+
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(400).json({ error: 'Invalid ID format' })
+    }
     const result = await query(
       'DELETE FROM dependents WHERE id = $1 AND user_id = $2 RETURNING id',
       [id, req.user!.id]

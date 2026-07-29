@@ -1,16 +1,25 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import jwt from 'jsonwebtoken'
+import rateLimit from 'express-rate-limit'
 import { query } from '../db/connection'
 import { requireAuth, AuthRequest } from '../middleware/auth'
 import { sendEmergencyAlert } from '../lib/telegram'
 import { addConnection, removeConnection, broadcast } from '../lib/sse'
 import { scheduleFollowUp } from '../lib/followup'
-import { SafetyEngine, OodEngine } from '@careroute/core'
 
 import { randomUUID } from 'crypto'
 
 const router = Router()
+
+// Rate limit only the expensive save route — NOT the queue or SSE endpoints
+const saveLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many triage requests. Please wait a moment.' },
+})
 
 // Store short-lived SSE tickets (valid for 30s)
 const sseTickets = new Map<string, { id: string; role: string }>()
@@ -39,6 +48,7 @@ const triageCaseSchema = z.object({
   for_dependent_id:      z.string().uuid().optional(),
   for_name:              z.string().optional(),
   confidence:            z.number().int().min(0).max(100).optional(),
+  decision_record:       z.record(z.unknown()).optional(),
   vitals: z.object({
     heartRateBpm: z.number().optional(),
     spo2Percent: z.number().optional(),
@@ -49,7 +59,7 @@ const triageCaseSchema = z.object({
 })
 
 // Protected route: Save a new triage case
-router.post('/save', requireAuth, async (req: AuthRequest, res) => {
+router.post('/save', saveLimiter, requireAuth, async (req: AuthRequest, res) => {
   try {
     const data = triageCaseSchema.parse(req.body)
     const userId = req.user!.id
@@ -83,64 +93,6 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
       patientGender = depResult.rows[0].gender
       patientDob = depResult.rows[0].date_of_birth
     }
-
-    const calculatedAge = patientDob ? Math.floor((Date.now() - new Date(patientDob).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 30
-    const sexMap: Record<string, string> = { 'M': 'MALE', 'F': 'FEMALE', 'Other': 'OTHER' }
-    const calculatedSex = (sexMap[patientGender] || 'OTHER') as 'MALE' | 'FEMALE' | 'OTHER'
-
-    // --- NEW V2 ARCHITECTURE INJECTION: SAFETY & OOD ENGINES ---
-    const safetyEngine = new SafetyEngine();
-    const oodEngine = new OodEngine();
-
-    // Map req.body to PatientPresentation format to satisfy the engines
-    const patientPresentation = {
-      patientId: String(patientId),
-      age: calculatedAge,
-      sex: calculatedSex,
-      chiefComplaint: data.symptom_text || data.summary,
-      symptomDurationHours: data.duration && data.duration.includes('days') ? 72 : 24, // basic fallback
-      vitals: { 
-        heartRateBpm:       data.vitals?.heartRateBpm, 
-        spo2Percent:        data.vitals?.spo2Percent,
-        temperatureCelsius: data.vitals?.temperatureCelsius, 
-        systolicBp:         data.vitals?.systolicBp,
-        diastolicBp:        data.vitals?.diastolicBp,
-      },
-      redFlags: {
-        unconsciousOrUnresponsive: data.redFlags?.includes('Fainting/confusion') || false,
-        severeBreathingDifficulty: data.redFlags?.includes('Severe shortness of breath') || false,
-        activeHeavyBleeding: data.redFlags?.includes("Bleeding that won't stop") || false,
-        suddenSevereChestPain: data.redFlags?.includes('Chest pain') || false,
-        newOnsetParalysisOrSlurredSpeech: data.redFlags?.includes('One-sided weakness/face droop') || false
-      },
-      context: {
-        extractedMedications: [],
-        knownAllergies: []
-      }
-    };
-
-    // ENGINE 4: Deterministic Safety Gateway
-    const safetyResult = safetyEngine.evaluate(patientPresentation);
-    if (safetyResult.action === 'REJECT_INVALID_DATA') {
-      return res.status(400).json({ error: 'Rejected by Safety Engine', reason: safetyResult.reason });
-    }
-    if (safetyResult.action === 'ROUTE_RED') {
-      data.severity = 'Red';
-      data.emergency = true;
-      data.summary = `[SAFETY ESCALATION] ${data.summary}`;
-      data.redFlags = [...(data.redFlags || []), `Safety Check Failed: ${safetyResult.reason}`];
-    }
-
-    // ENGINE 5: OOD Detection
-    const oodResult = oodEngine.evaluate(patientPresentation);
-    if (oodResult.action === 'ABSTAIN') {
-      // Escalated due to OOD
-      data.severity = 'Red';
-      data.emergency = true;
-      data.summary = `[OOD ESCALATION] ${data.summary}`;
-      data.redFlags = [...(data.redFlags || []), `OOD Detection Triggered: ${oodResult.reason}`];
-    }
-    // --- END V2 ARCHITECTURE INJECTION ---
 
     // 2. Insert the triage case
     const insertResult = await query(
@@ -199,6 +151,9 @@ router.post('/save', requireAuth, async (req: AuthRequest, res) => {
       condition_guess:       data.condition_guess,
       summary:               data.summary,
       recommended_specialty: data.recommended_specialty,
+      patient_name:          patientName || 'Unknown Patient',
+      gender:                patientGender,
+      date_of_birth:         patientDob,
       created_at:            new Date().toISOString(),
     })
 
@@ -320,6 +275,10 @@ router.get('/queue', requireAuth, async (req: AuthRequest, res) => {
       return res.status(403).json({ error: 'Clinician access required' })
     }
 
+    const sinceDate = req.query.since && !isNaN(new Date(req.query.since as string).getTime())
+      ? new Date(req.query.since as string).toISOString()
+      : null
+
     const result = await query(
       `SELECT
          t.id, t.severity, t.emergency, t.condition_guess, t.summary,
@@ -331,12 +290,12 @@ router.get('/queue', requireAuth, async (req: AuthRequest, res) => {
          p.date_of_birth
        FROM triage_cases t
        JOIN patients p ON t.patient_id = p.id
-       ${req.query.since ? 'WHERE t.created_at > $1' : ''}
+       ${sinceDate ? 'WHERE t.created_at > $1' : ''}
        ORDER BY
          t.reviewed ASC,
          CASE t.severity WHEN 'Red' THEN 1 WHEN 'Amber' THEN 2 ELSE 3 END ASC,
          t.created_at DESC`,
-      req.query.since ? [new Date(req.query.since as string).toISOString()] : []
+      sinceDate ? [sinceDate] : []
     )
 
     const queue = result.rows.map((row: any) => ({

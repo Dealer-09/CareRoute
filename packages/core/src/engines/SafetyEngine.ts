@@ -44,6 +44,10 @@ export class SafetyEngine {
       return { action: 'REJECT_INVALID_DATA', reason: `Heart rate ${vitals.heartRateBpm} BPM is physiologically implausible`, ruleTriggered: 'PLAUSIBILITY_HR' };
     }
 
+    if (vitals.systolicBp !== undefined && (vitals.systolicBp < 40 || vitals.systolicBp > 300)) {
+      return { action: 'REJECT_INVALID_DATA', reason: `Systolic BP ${vitals.systolicBp} is physiologically impossible`, ruleTriggered: 'PLAUSIBILITY_SYSTOLIC_BP' };
+    }
+
     if (vitals.temperatureCelsius !== undefined && (vitals.temperatureCelsius < 20 || vitals.temperatureCelsius > 45)) {
       return { action: 'REJECT_INVALID_DATA', reason: `Temperature ${vitals.temperatureCelsius}°C is physically impossible for a living human`, ruleTriggered: 'PLAUSIBILITY_TEMP' };
     }
@@ -92,6 +96,14 @@ export class SafetyEngine {
 
     if (vitals.heartRateBpm !== undefined && (vitals.heartRateBpm > 130 || vitals.heartRateBpm < 40)) {
       return { action: 'ROUTE_RED', reason: `Critical Arrhythmia/Tachycardia risk: HR is ${vitals.heartRateBpm}`, ruleTriggered: 'VITAL_HR_CRITICAL' };
+    }
+
+    if (vitals.temperatureCelsius !== undefined && vitals.temperatureCelsius < 32) {
+      return { action: 'ROUTE_RED', reason: `Severe hypothermia: Temperature is ${vitals.temperatureCelsius}°C`, ruleTriggered: 'VITAL_TEMP_HYPOTHERMIA' };
+    }
+
+    if (vitals.temperatureCelsius !== undefined && vitals.temperatureCelsius < 32) {
+      return { action: 'ROUTE_RED', reason: `Severe hypothermia: Temperature is ${vitals.temperatureCelsius}°C`, ruleTriggered: 'VITAL_TEMP_HYPOTHERMIA' };
     }
 
     return null; // No red flags triggered

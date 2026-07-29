@@ -4,8 +4,6 @@
  * Silently skips if TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID are not configured.
  */
 
-const BOT_TOKEN  = process.env.TELEGRAM_BOT_TOKEN
-const CHAT_ID    = process.env.TELEGRAM_CHAT_ID
 
 export type AlertPayload = {
   severity: string
@@ -18,7 +16,8 @@ export type AlertPayload = {
   triageCaseId: string
 }
 
-function escapeHTML(str: string): string {
+function escapeHTML(str: string | null | undefined): string {
+  if (!str) return ''
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')
 }
 
@@ -46,6 +45,8 @@ function buildMessage(p: AlertPayload): string {
 }
 
 export async function sendTelegramMessage(text: string): Promise<void> {
+  const BOT_TOKEN  = process.env.TELEGRAM_BOT_TOKEN
+  const CHAT_ID    = process.env.TELEGRAM_CHAT_ID
   if (!BOT_TOKEN || !CHAT_ID) return
   const url  = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`
   try {

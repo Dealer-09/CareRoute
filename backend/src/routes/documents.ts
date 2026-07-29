@@ -68,13 +68,21 @@ router.post('/upload', requireAuth, (req: AuthRequest, res, next) => {
         return res.status(500).json({ error: 'File upload failed: ' + uploadError.message })
       }
 
-      // 4. Save metadata to documents table
-      const insertResult = await query(
-        `INSERT INTO documents (patient_id, triage_case_id, file_name, storage_path, mime_type)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, file_name, storage_path, mime_type, created_at`,
-        [patientId, triage_case_id || null, req.file.originalname, storagePath, req.file.mimetype]
-      )
+      // 4. Save metadata to documents table — if this fails, clean up the storage file
+      let insertResult
+      try {
+        insertResult = await query(
+          `INSERT INTO documents (patient_id, triage_case_id, file_name, storage_path, mime_type)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id, file_name, storage_path, mime_type, created_at`,
+          [patientId, triage_case_id || null, req.file.originalname, storagePath, req.file.mimetype]
+        )
+      } catch (dbErr) {
+        // DB insert failed — roll back the storage upload to prevent orphaned files
+        await supabase.storage.from(BUCKET).remove([storagePath]).catch(() => {})
+        console.error('DB insert failed, storage file cleaned up:', dbErr)
+        return res.status(500).json({ error: 'Failed to save document record' })
+      }
 
       await query(
         'INSERT INTO audit_log (user_id, action, entity_type, entity_id) VALUES ($1, $2, $3, $4)',

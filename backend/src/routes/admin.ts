@@ -61,7 +61,7 @@ router.get('/users', requireAuth, requireAdmin, async (req, res) => {
        GROUP BY u.id, u.email, u.role, u.created_at, p.name
        ORDER BY u.created_at DESC
        LIMIT $2 OFFSET $3`,
-      [likePattern, Math.min(Math.max(parseInt(limit) || 50, 1), 200), parseInt(offset)]
+      [likePattern, Math.min(Math.max(parseInt(limit) || 50, 1), 200), Math.max(parseInt(offset) || 0, 0)]
     )
 
     const countResult = await query(
@@ -174,7 +174,7 @@ router.get('/audit', requireAuth, requireAdmin, async (req, res) => {
        WHERE ($1 = '' OR a.action ILIKE $1)
        ORDER BY a.created_at DESC
        LIMIT $2 OFFSET $3`,
-      [action ? `%${action}%` : '', Math.min(Math.max(parseInt(limit) || 100, 1), 200), parseInt(offset)]
+      [action ? `%${action}%` : '', Math.min(Math.max(parseInt(limit) || 100, 1), 200), Math.max(parseInt(offset) || 0, 0)]
     )
 
     res.json({ audit: result.rows })
@@ -223,7 +223,7 @@ router.get('/compliance/decisions', requireAuth, requireAdmin, async (req, res) 
          AND ($1 = '' OR t.severity = $1)
        ORDER BY t.created_at DESC
        LIMIT $2 OFFSET $3`,
-      [severity, Math.min(Math.max(parseInt(limit) || 100, 1), 200), parseInt(offset)]
+      [severity, Math.min(Math.max(parseInt(limit) || 100, 1), 200), Math.max(parseInt(offset) || 0, 0)]
     )
 
     const countResult = await query(

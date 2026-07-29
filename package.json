@@ -14,6 +14,8 @@
   },
   "dependencies": {
     "@careroute/core": "workspace:*",
+    "@next/env": "^16.2.12",
+    "@swc/helpers": "^0.5.23",
     "@tensorflow/tfjs-backend-webgl": "4.22.0",
     "@tensorflow/tfjs-core": "4.22.0",
     "@tensorflow/tfjs-tflite": "0.0.1-alpha.10",
@@ -23,6 +25,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-leaflet": "^5.0.0",
+    "styled-jsx": "^5.1.7",
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {

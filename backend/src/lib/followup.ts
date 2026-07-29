@@ -13,7 +13,7 @@
  * No paid services required — reuses the existing TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID.
  */
 
-import { query } from '../db/connection'
+import { query, transaction } from '../db/connection'
 import { sendTelegramMessage } from './telegram'
 
 const FOLLOW_UP_HOURS = 24
@@ -42,29 +42,31 @@ async function generateFutureSlots(): Promise<void> {
   try {
     const doctors = await query('SELECT id FROM doctors WHERE available = TRUE')
     const now = new Date()
-    // Generate slots for precisely 7 days from today
-    const d = 7
+    // Generate slots for days 1 through 7 from today — ensures fresh deployments
+    // have a full week of bookable slots, not just day 7.
     let newSlots = 0
     for (const doctor of doctors.rows) {
-      for (let h = 9; h < 17; h++) {
-        for (const m of [0, 30]) {
-          const slot = new Date(now)
-          slot.setDate(now.getDate() + d)
-          slot.setHours(h, m, 0, 0)
-          try {
-            await query(
-              `INSERT INTO doctor_slots (doctor_id, starts_at)
-               VALUES ($1, $2)
-               ON CONFLICT (doctor_id, starts_at) DO NOTHING`,
-              [doctor.id, slot.toISOString()]
-            )
-            newSlots++
-          } catch { /* skip */ }
+      for (let d = 1; d <= 7; d++) {
+        for (let h = 9; h < 17; h++) {
+          for (const m of [0, 30]) {
+            const slot = new Date(now)
+            slot.setDate(now.getDate() + d)
+            slot.setHours(h, m, 0, 0)
+            try {
+              await query(
+                `INSERT INTO doctor_slots (doctor_id, starts_at)
+                 VALUES ($1, $2)
+                 ON CONFLICT (doctor_id, starts_at) DO NOTHING`,
+                [doctor.id, slot.toISOString()]
+              )
+              newSlots++
+            } catch { /* skip */ }
+          }
         }
       }
     }
     if (newSlots > 0) {
-      console.log(`[scheduler] Generated ${newSlots} new doctor slots for Day 7`)
+      console.log(`[scheduler] Generated ${newSlots} new doctor slots`)
     }
   } catch (err) {
     console.error('[scheduler] Failed to generate slots:', err)
@@ -80,55 +82,60 @@ async function processFollowUps(): Promise<void> {
     let totalSent = 0
 
     while (true) {
-      const result = await query(
-        `SELECT
-           f.id              AS follow_up_id,
-           f.triage_case_id,
-           p.name            AS patient_name,
-           t.severity,
-           t.condition_guess,
-           t.summary,
-           t.for_name
-         FROM follow_ups f
-         JOIN patients p      ON f.patient_id      = p.id
-         JOIN triage_cases t  ON f.triage_case_id  = t.id
-         WHERE f.sent = FALSE AND f.due_at <= NOW()
-         LIMIT $1`,
-        [BATCH_SIZE]
-      )
+      const batchSent = await transaction(async (client) => {
+        const result = await client.query(
+          `SELECT
+             f.id              AS follow_up_id,
+             f.triage_case_id,
+             p.name            AS patient_name,
+             t.severity,
+             t.condition_guess,
+             t.summary,
+             t.for_name
+           FROM follow_ups f
+           JOIN patients p      ON f.patient_id      = p.id
+           JOIN triage_cases t  ON f.triage_case_id  = t.id
+           WHERE f.sent = FALSE AND f.due_at <= NOW()
+           LIMIT $1
+           FOR UPDATE SKIP LOCKED`,
+          [BATCH_SIZE]
+        )
 
-      if (result.rows.length === 0) break  // No more due follow-ups
+        if (result.rows.length === 0) return -1 // No more due follow-ups
 
-      for (const row of result.rows) {
-        try {
-          const displayName = row.for_name || row.patient_name || 'Unknown Patient'
-          const message = [
-            `⏰ <b>24-Hour Follow-Up Due</b>`,
-            ``,
-            `Patient: <b>${displayName}</b>`,
-            `Last Assessment: <b>${row.severity}</b> — ${row.condition_guess}`,
-            `Summary: ${row.summary}`,
-            ``,
-            `Please check in with the patient to see if their condition has improved, worsened, or if they need escalation.`,
-            ``,
-            `#CareRoute #FollowUp`,
-          ].join('\n')
+        let count = 0
+        for (const row of result.rows) {
+          try {
+            const displayName = row.for_name || row.patient_name || 'Unknown Patient'
+            const message = [
+              `⏰ <b>24-Hour Follow-Up Due</b>`,
+              ``,
+              `Patient: <b>${displayName}</b>`,
+              `Last Assessment: <b>${row.severity}</b> — ${row.condition_guess}`,
+              `Summary: ${row.summary}`,
+              ``,
+              `Please check in with the patient to see if their condition has improved, worsened, or if they need escalation.`,
+              ``,
+              `#CareRoute #FollowUp`,
+            ].join('\n')
 
-          await sendTelegramMessage(message)
+            await sendTelegramMessage(message)
 
-          // Mark as sent individually — a DB failure here doesn't block the rest
-          await query(
-            'UPDATE follow_ups SET sent = TRUE, sent_at = NOW() WHERE id = $1',
-            [row.follow_up_id]
-          )
-          totalSent++
-        } catch (rowErr) {
-          console.error(`[follow-up] Failed for follow_up ${row.follow_up_id}:`, rowErr)
+            // Mark as sent individually — a DB failure here doesn't block the rest
+            await client.query(
+              'UPDATE follow_ups SET sent = TRUE, sent_at = NOW() WHERE id = $1',
+              [row.follow_up_id]
+            )
+            count++
+          } catch (rowErr) {
+            console.error(`[follow-up] Failed for follow_up ${row.follow_up_id}:`, rowErr)
+          }
         }
-      }
+        return count
+      })
 
-      // If we got fewer rows than the batch size, there are no more to process
-      if (result.rows.length < BATCH_SIZE) break
+      if (batchSent === -1) break
+      totalSent += batchSent
     }
 
     if (totalSent > 0) {
@@ -144,14 +151,21 @@ async function processFollowUps(): Promise<void> {
 let followUpInterval: ReturnType<typeof setInterval> | null = null
 
 export function startFollowUpScheduler(): void {
+  // Generate slots on every boot regardless of Telegram config
+  generateFutureSlots()
+
   if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
-    console.log('[follow-up] TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set — follow-up scheduler disabled')
+    console.log('[follow-up] TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set — follow-up notifications disabled')
+    console.log('[follow-up] Slot regeneration cron is still active')
+    // Still run the slot regeneration cron even without Telegram
+    followUpInterval = setInterval(() => {
+      if (new Date().getHours() === 2) generateFutureSlots()
+    }, 60 * 60 * 1000)
     return
   }
 
   // Run immediately on boot (catches any missed follow-ups from downtime)
   processFollowUps()
-  generateFutureSlots()
 
   // Then every hour
   followUpInterval = setInterval(() => {

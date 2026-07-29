@@ -10,6 +10,7 @@ These binary files are excluded from git (see `.gitignore`) because they exceed 
 | `tokenizer.json` | ~5 MB | HuggingFace: `naver-clova-ix/donut-base` |
 | `special_tokens_map.json` | ~1 KB | HuggingFace: `naver-clova-ix/donut-base` |
 | `tokenizer_config.json` | ~1 KB | HuggingFace: `naver-clova-ix/donut-base` |
+| `drug_dictionary.json` | ~2–5 MB | Generated from Tata 1mg Kaggle dataset — see instructions below |
 
 ## Getting the TFLite Model
 
@@ -47,3 +48,25 @@ Or download manually from: https://huggingface.co/naver-clova-ix/donut-base/tree
 - **Decoder start token:** ID `57524` (`<s_synthdog>`)
 - **EOS token:** ID `2` (`</s>`)
 - **Runtime:** TensorFlow.js TFLite + WebGL backend (runs entirely in the browser)
+
+## Getting the Drug Dictionary
+
+The fuzzy corrector snaps OCR output to real Indian medicine names using the
+[India Medicines and Drug Info Dataset](https://www.kaggle.com/datasets/apkaayush/india-medicines-and-drug-info-dataset) by Apka_Ayush on Kaggle.
+
+Run this script after downloading the dataset CSV:
+
+```python
+import pandas as pd, json
+
+df = pd.read_csv('India Medicines and Drug Info Dataset.csv')
+names = df['Medicine Name'].dropna().str.strip().unique().tolist()
+
+with open('public/models/drug_dictionary.json', 'w', encoding='utf-8') as f:
+    json.dump(names, f, ensure_ascii=False)
+
+print(f"Written {len(names)} drug names to drug_dictionary.json")
+```
+
+Place the output at `public/models/drug_dictionary.json`.
+The corrector is optional - the OCR pipeline degrades gracefully if the file is absent.

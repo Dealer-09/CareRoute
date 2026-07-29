@@ -2,13 +2,13 @@ import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 
-dotenv.config({ path: path.join(__dirname, '../../.env.local') })
+dotenv.config({ path: path.join(__dirname, '../../../.env.local') })
 
-const supabaseUrl = process.env.SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY!
+const supabaseUrl = process.env.SUPABASE_URL ?? ''
+const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY ?? ''
 
 if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error('SUPABASE_URL or SUPABASE_SECRET_KEY missing in .env.local')
+  console.warn('[supabase] SUPABASE_URL or SUPABASE_SECRET_KEY not set — Storage features will be unavailable')
 }
 
 // Service-role client — bypasses RLS, server-side only, never expose to client

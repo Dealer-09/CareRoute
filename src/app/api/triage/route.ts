@@ -103,8 +103,18 @@ export async function POST(req: NextRequest) {
       calculatedSex = body.dependent?.gender === 'M' ? 'MALE' : (body.dependent?.gender === 'F' ? 'FEMALE' : 'OTHER');
     }
 
+    // Extract user ID from JWT if present, otherwise guest
+    let patientId = 'GUEST-' + Date.now()
+    const authHeader2 = req.headers.get('authorization')
+    if (authHeader2?.startsWith('Bearer ')) {
+      try {
+        const payload = JSON.parse(atob(authHeader2.split('.')[1]))
+        if (payload?.id) patientId = payload.id
+      } catch { /* guest fallback */ }
+    }
+
     const patientPresentation: PatientPresentation = {
-      patientId: 'GUEST-' + Date.now(),
+      patientId,
       age: calculatedAge,
       sex: calculatedSex,
       chiefComplaint: text,

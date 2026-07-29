@@ -117,7 +117,7 @@ sequenceDiagram
         NX-->>FE: Full triage result + DecisionRecord
     end
     FE->>BE: POST /api/triage/save {result, symptom_text, for_dependent_id?}
-    BE->>BE: Verify dependent ownership, re-run SafetyEngine, persist triage_cases
+    BE->>BE: Verify dependent ownership, persist triage_cases
     alt Red or Amber
         BE->>TG: sendEmergencyAlert() [non-blocking]
         BE->>BE: scheduleFollowUp() → follow_ups table
@@ -231,7 +231,7 @@ DecisionRecord (CDSCO-compliant audit record)
 | **Database** | Supabase (PostgreSQL) |
 | **Auth** | JWT (bcrypt, 7-day tokens, max 128-char passwords) |
 | **AI — Triage** | Deterministic Six-Engine Pipeline (Manchester/ESI, no LLM) |
-| **AI — OCR** | Donut Vision Transformer (545 MB TFLite, WebGL, autoregressive decode) |
+| **AI — OCR** | Donut Vision Transformer (~1 GB TFLite, WebGL, autoregressive decode + Tata 1mg fuzzy corrector) |
 | **Storage** | Supabase Storage (documents, auto-bucket on startup) |
 | **Maps** | Leaflet + react-leaflet, OpenStreetMap tiles, Overpass API |
 | **Alerts** | Telegram Bot API (native fetch, non-blocking) |
@@ -409,6 +409,7 @@ erDiagram
 | PATCH | `/api/admin/users/:id/role` | ✅ admin | Change user role |
 | DELETE | `/api/admin/users/:id` | ✅ admin | Delete user + storage cleanup |
 | GET | `/api/admin/audit` | ✅ admin | Audit log with action filter |
+| GET | `/api/admin/compliance/decisions` | ✅ admin | CDSCO DecisionRecord audit trail |
 
 ### Next.js API Routes (frontend server)
 | Method | Endpoint | Description |
@@ -519,19 +520,27 @@ CareRoute/
 │       ├── storage.ts                 # localStorage triage history (guest fallback)
 │       ├── utils.ts                   # Shared helpers (timeAgo)
 │       └── pipeline/
-│           ├── TriagePipeline.ts      # Master controller: Safety→OOD→Rules
+│           └── TriagePipeline.ts      # Master controller: Safety→OOD→Rules (engines from @careroute/core)
+│
+├── packages/
+│   └── core/                          # @careroute/core — shared Bun workspace package
+│       ├── package.json
+│       ├── tsconfig.json
+│       └── src/
+│           ├── index.ts               # Barrel export
 │           ├── types/clinical.ts      # PatientPresentation, DecisionRecord types
 │           └── engines/
-│               ├── SafetyEngine.ts    # Plausibility + vital collapse + red flags
+│               ├── SafetyEngine.ts    # Plausibility + vital collapse + all 5 red flags
 │               ├── OodEngine.ts       # Semantic + tabular OOD detection
-│               └── ClinicalRuleEngine.ts  # Manchester/ESI text + vitals rule tree
+│               └── ClinicalRuleEngine.ts  # Manchester/ESI text + vitals + demographics
 │
 ├── public/
 │   └── models/
-│       ├── rx_ocr_quantized.tflite    # Donut Vision Transformer (545 MB, WebGL)
+│       ├── rx_ocr_quantized.tflite    # Donut Vision Transformer (~1 GB, WebGL, retrained)
 │       ├── tokenizer.json             # XLMRoberta SentencePiece vocab
 │       ├── special_tokens_map.json    # Special token definitions
-│       └── tokenizer_config.json     # Tokenizer class + token IDs
+│       ├── tokenizer_config.json      # Tokenizer class + token IDs
+│       └── drug_dictionary.json       # 251k Indian medicine names (Tata 1mg, gitignored)
 │
 └── backend/                           # Express API
     └── src/
@@ -552,10 +561,7 @@ CareRoute/
         │   ├── supabase.ts            # Supabase admin client + ensureStorageBucket()
         │   ├── telegram.ts            # Emergency alert utility
         │   ├── followup.ts            # 24h follow-up scheduler + daily slot regeneration
-        │   ├── sse.ts                 # SSE connection pool + heartbeat + stopHeartbeat()
-        │   └── engines/
-        │       ├── SafetyEngine.ts    # Backend safety validation on save
-        │       └── OodEngine.ts       # Backend OOD check on save
+        │   └── sse.ts                 # SSE connection pool + heartbeat + stopHeartbeat()
         └── db/
             ├── connection.ts          # pg Pool (max 10, idle 30s, connect 5s)
             ├── schema.sql             # Full idempotent schema (all tables + indexes)
@@ -569,7 +575,7 @@ CareRoute/
 | Phase | Feature | Status |
 |---|---|---|
 | 0 | Express backend, PostgreSQL schema, JWT auth | ✅ |
-| 0 | Rate limiting (tiered: triage 10/min, maps 20/min, general 100/min) | ✅ |
+| 0 | Rate limiting (tiered: triage save 10/min, maps 20/min, general 100/min) | ✅ |
 | 0 | pg.Pool connection limits (max 10, idle timeout, connect timeout) | ✅ |
 | 0 | Graceful shutdown (SIGTERM/SIGINT — clears all intervals) | ✅ |
 | 0 | Supabase Storage bucket auto-created on startup | ✅ |
@@ -589,6 +595,7 @@ CareRoute/
 | 3 | SSE live queue — push on new case, 30s heartbeat, ?since= reconnect gap recovery | ✅ |
 | 4 | Document upload → Supabase Storage, signed URLs | ✅ |
 | 4 | On-device Donut OCR — WebGL autoregressive decode, zero-dependency tokenizer | ✅ |
+| 4 | Tata 1mg fuzzy corrector — 251k Indian drug names, prefix-indexed Levenshtein snap | ✅ |
 | 5 | Telegram emergency alerts (non-blocking) | ✅ |
 | 5 | 24-hour follow-up engine — batched loop, no LIMIT | ✅ |
 | 5 | Daily slot regeneration — 2AM cron keeps doctor availability current | ✅ |
@@ -605,8 +612,6 @@ CareRoute/
 - [ ] `condition_guess` — real diagnosis name (currently specialty-derived label)
 - [ ] Triage summary — clinical narrative (currently probability percentages)
 - [ ] Confidence — real uncertainty score (currently rule-engine derived 90%)
-- [ ] `decision_record` compliance viewer — audit data stored but no UI
-- [ ] Engine monorepo — shared package for frontend/backend engine trees (TD-5)
 
 ### Not planned
 - Google OAuth — email/password is sufficient
