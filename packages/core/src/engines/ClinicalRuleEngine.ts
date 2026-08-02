@@ -50,28 +50,13 @@ const AMBER_TEXT_PATTERNS: Array<{ keywords: string[]; reason: string }> = [
 export class ClinicalRuleEngine {
   /**
    * Deterministic Manchester Triage / ESI inspired rule tree.
-   * Now evaluates chiefComplaint text and boolean redFlags in addition to vitals.
+   *
+   * Invariant: this method is only called when SafetyEngine returned PROCEED_TO_OOD,
+   * which guarantees ALL five boolean red flags are already false.
+   * Do NOT re-check those flags here — SafetyEngine owns them exclusively.
    */
   public evaluate(patient: PatientPresentation): RuleEvaluationResult {
     const lower = patient.chiefComplaint.toLowerCase();
-
-    // ── 0. Boolean red flags that reached this engine (SafetyEngine didn't catch them,
-    //       meaning vitals were normal — but the flag is still a clinical concern) ──
-    if (patient.redFlags.suddenSevereChestPain) {
-      return { action: 'Red', reason: 'Chest pain flag confirmed — requires urgent cardiac evaluation' };
-    }
-    if (patient.redFlags.newOnsetParalysisOrSlurredSpeech) {
-      return { action: 'Red', reason: 'Neurological symptom flag confirmed — urgent neurological assessment needed' };
-    }
-    if (patient.redFlags.unconsciousOrUnresponsive) {
-      return { action: 'Red', reason: 'Altered consciousness flag confirmed — urgent evaluation required' };
-    }
-    if (patient.redFlags.severeBreathingDifficulty) {
-      return { action: 'Red', reason: 'Severe breathing difficulty flag confirmed — urgent respiratory evaluation' };
-    }
-    if (patient.redFlags.activeHeavyBleeding) {
-      return { action: 'Red', reason: 'Active bleeding flag confirmed — urgent assessment required' };
-    }
 
     // ── 1. Free-text Amber patterns (catches what vitals/flags alone cannot) ──
     for (const pattern of AMBER_TEXT_PATTERNS) {
