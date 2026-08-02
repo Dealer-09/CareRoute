@@ -122,11 +122,11 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
     fetch(`${BACKEND_URL}/api/dependents`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => { if (d.dependents) setDependents(d.dependents) })
-      .catch(() => {})
+      .catch((e) => console.warn('[TriageWizard] Failed to load dependents:', e))
     fetch(`${BACKEND_URL}/api/profile`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => { if (d.date_of_birth !== undefined) setSelfProfile({ date_of_birth: d.date_of_birth, gender: d.gender }) })
-      .catch(() => {})
+      .catch((e) => console.warn('[TriageWizard] Failed to load profile:', e))
   }, [])
   // ─── Voice-to-text ─────────────────────────────────────────────────────────
   function toggleVoice() {
@@ -217,35 +217,41 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
 
         const data: TriageResult = await res.json()
         const withMeta: TriageResult = { ...data, files, duration }
-        setResult(withMeta)
-        saveAnalysisToHistory(withMeta)
 
-        // Phase 0: Save to DB if logged in
+        // Phase 0: Save to DB if logged in (non-blocking — result is shown regardless)
         if (token) {
-          const saveRes = await fetch(`${BACKEND_URL}/api/triage/save`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              ...withMeta,
-              symptom_text:     text,
-              for_dependent_id: selectedFor !== 'self' ? selectedFor.id   : undefined,
-              for_name:         selectedFor !== 'self' ? selectedFor.name  : undefined,
-              vitals: {
-                heartRateBpm: heartRate ? parseInt(heartRate) || undefined : undefined,
-                spo2Percent: spo2 ? parseInt(spo2) || undefined : undefined,
-                temperatureCelsius: temperature ? parseFloat(temperature) || undefined : undefined,
-                systolicBp: bloodPressure?.includes('/') ? parseInt(bloodPressure.split('/')[0]) || undefined : undefined,
-                diastolicBp: bloodPressure?.includes('/') ? parseInt(bloodPressure.split('/')[1]) || undefined : undefined,
-              }
+          try {
+            const saveRes = await fetch(`${BACKEND_URL}/api/triage/save`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                ...withMeta,
+                symptom_text:     text,
+                for_dependent_id: selectedFor !== 'self' ? selectedFor.id   : undefined,
+                for_name:         selectedFor !== 'self' ? selectedFor.name  : undefined,
+                vitals: {
+                  heartRateBpm: heartRate ? parseInt(heartRate) || undefined : undefined,
+                  spo2Percent: spo2 ? parseInt(spo2) || undefined : undefined,
+                  temperatureCelsius: temperature ? parseFloat(temperature) || undefined : undefined,
+                  systolicBp: bloodPressure?.includes('/') ? parseInt(bloodPressure.split('/')[0]) || undefined : undefined,
+                  diastolicBp: bloodPressure?.includes('/') ? parseInt(bloodPressure.split('/')[1]) || undefined : undefined,
+                }
+              })
             })
-          })
-          if (!saveRes.ok) {
-            throw new Error('Failed to save triage case to database')
+            if (!saveRes.ok) {
+              console.error('DB save failed: server returned', saveRes.status)
+            }
+          } catch (e) {
+            console.error('DB save failed:', e)
           }
         }
+
+        // Show results unconditionally — DB save failure is non-blocking
+        setResult(withMeta)
+        saveAnalysisToHistory(withMeta)
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Analysis failed. Please try again.'
         setError(message)
@@ -730,7 +736,7 @@ export const TriageWizard: React.FC<Props> = ({ onClose, variant = 'modal' }) =>
           </div>
           <div className="flex gap-2">
             {step < 3 ? (
-              <Button id="triage-next-btn" onClick={handleNext}>
+              <Button id="triage-next-btn" onClick={handleNext} disabled={loading}>
                 {step === 2 ? 'Analyse Symptoms →' : 'Next →'}
               </Button>
             ) : result ? (

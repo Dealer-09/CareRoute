@@ -139,8 +139,8 @@ export default function Home() {
                 { label: 'Accuracy Rate', val: '95%' },
                 { label: 'Partner Clinics', val: '200+' },
                 { label: 'Availability', val: '24/7' }
-              ].map((s, i) => (
-                <div key={i}>
+              ].map((s) => (
+                <div key={s.label}>
                   <div className="text-4xl font-bold text-blue-600 mb-1">{s.val}</div>
                   <div className="text-sm font-medium text-slate-500 uppercase tracking-wide">{s.label}</div>
                 </div>

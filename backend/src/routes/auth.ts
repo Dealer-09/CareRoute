@@ -33,7 +33,8 @@ const signinSchema = z.object({
 router.post('/signup', authLimiter, async (req, res) => {
   try {
     const { email, password, role, name } = signupSchema.parse(req.body)
-    const secret = process.env.JWT_SECRET!
+    const secret = process.env.JWT_SECRET
+    if (!secret) return res.status(500).json({ error: 'Internal server error' })
 
     // 1. Check if user exists
     const existing = await query('SELECT id FROM users WHERE email = $1', [email])
@@ -91,7 +92,8 @@ router.post('/signup', authLimiter, async (req, res) => {
 router.post('/signin', authLimiter, async (req, res) => {
   try {
     const { email, password } = signinSchema.parse(req.body)
-    const secret = process.env.JWT_SECRET!
+    const secret = process.env.JWT_SECRET
+    if (!secret) return res.status(500).json({ error: 'Internal server error' })
 
     const result = await query('SELECT id, email, password_hash, role FROM users WHERE email = $1', [email])
     const user = result.rows[0]

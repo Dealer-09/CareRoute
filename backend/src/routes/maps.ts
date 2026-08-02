@@ -67,7 +67,7 @@ router.get('/nearest-er', async (req, res) => {
         const elLat = el.lat ?? el.center?.lat
         const elLng = el.lon ?? el.center?.lon
 
-        if (!elLat || !elLng) return null
+        if (elLat == null || elLng == null) return null
 
         const dLat = (elLat - latN) * 111
         const dLng = (elLng - lngN) * 111 * Math.cos(latN * Math.PI / 180)

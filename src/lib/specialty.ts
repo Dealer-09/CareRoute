@@ -96,7 +96,7 @@ export function matchSpecialty(text: string, llmSuggested?: string): SpecialtyMa
   }
 
   // LLM suggestion as fallback when no deterministic rule fires
-  if (llmSuggested && llmSuggested !== 'General Medicine') {
+  if (llmSuggested && llmSuggested.toLowerCase() !== 'general medicine') {
     return {
       specialty: llmSuggested,
       reason: 'Matched based on AI symptom pattern analysis',

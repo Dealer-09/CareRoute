@@ -154,6 +154,10 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
     const userId = req.user!.id
     const { id } = req.params
 
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(400).json({ error: 'Invalid document ID format' })
+    }
+
     // Verify ownership before deleting
     const result = await query(
       `SELECT d.id, d.storage_path

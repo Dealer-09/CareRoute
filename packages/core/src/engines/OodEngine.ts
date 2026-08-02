@@ -71,6 +71,10 @@ export class OodEngine {
     // TODO: Implement actual Isolation Forest or Mahalanobis calculation using ONNX.
     // For now, return a dynamic score based on vital extremes
     let score = 0.15;
+    // NOTE: These branches are intentionally unreachable — SafetyEngine routes
+    // temp < 32C → RED and HR > 130 → RED before OodEngine is ever called.
+    // They are retained as documentation of the intended tabular OOD logic
+    // and will activate if SafetyEngine thresholds are ever relaxed.
     if (patient.vitals.temperatureCelsius && patient.vitals.temperatureCelsius < 32) score += 0.5;
     if (patient.vitals.heartRateBpm && patient.vitals.heartRateBpm > 200) score += 0.5;
     

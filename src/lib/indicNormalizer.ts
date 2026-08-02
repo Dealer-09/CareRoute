@@ -49,8 +49,9 @@ const INDIC_SYMPTOM_MAP: SymptomMapping[] = [
     english: 'palpitations',
   },
   {
-    hinglish: ['saans phoolna', 'saans nahi aa raha', 'saans lene mein takleef',
-               'saans lene mein problem', 'saans ruk raha', 'dama'],
+    hinglish: ['saans phoolna', 'saans phool raha', 'saans phool rahi', 'saans phool rahe',
+               'saans nahi aa raha', 'saans nahi aa rahi', 'saans lene mein takleef',
+               'saans lene mein problem', 'saans ruk raha', 'saans ruk rahi', 'dama'],
     english: 'shortness of breath',
   },
 
@@ -219,8 +220,8 @@ const INDIC_SYMPTOM_MAP: SymptomMapping[] = [
     english: 'uncontrolled bleeding',
   },
   {
-    hinglish: ['dौरा pada', 'seizure aa gaya', 'mircchi aa gayi', 'convulsion hua',
-               'jhatke aa rahe'],
+    hinglish: ['daura pada', 'dora pada', 'seizure aa gaya', 'mircchi aa gayi', 'convulsion hua',
+               'jhatke aa rahe', 'mirgi aa gayi', 'mirgi ka daura'],
     english: 'seizure convulsion',
   },
 ]

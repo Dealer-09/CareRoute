@@ -607,6 +607,7 @@ CareRoute/
 | 7 | Partial unique index on slot bookings (`WHERE status != 'cancelled'`) | ✅ |
 | 7 | Admin panel — stats, user management, role control, audit log | ✅ |
 | 7 | Paginated triage history (`?limit=&offset=`) | ✅ |
+| 7 | CDSCO DecisionRecord compliance viewer — admin audit trail with severity filter | ✅ |
 
 ### Deferred (require LLM or additional infrastructure)
 - [ ] `condition_guess` — real diagnosis name (currently specialty-derived label)

@@ -18,7 +18,9 @@ const AMBER_TEXT_PATTERNS: Array<{ keywords: string[]; reason: string }> = [
     reason: 'Cardiac-descriptive pain pattern in free text',
   },
   {
-    keywords: ['weakness', 'face droop', 'facial droop', 'slurred', 'one side', 'one-sided'],
+    keywords: ['face droop', 'facial droop', 'slurred', 'one side', 'one-sided',
+               'one-sided weakness', 'arm weakness', 'leg weakness on one side',
+               'weakness in arm', 'weakness in leg', 'weakness on one side'],
     reason: 'Neurological symptom pattern (possible CVA) in free text',
   },
   {
@@ -56,19 +58,19 @@ export class ClinicalRuleEngine {
     // ── 0. Boolean red flags that reached this engine (SafetyEngine didn't catch them,
     //       meaning vitals were normal — but the flag is still a clinical concern) ──
     if (patient.redFlags.suddenSevereChestPain) {
-      return { action: 'Amber', reason: 'Chest pain flag confirmed — requires urgent cardiac evaluation' };
+      return { action: 'Red', reason: 'Chest pain flag confirmed — requires urgent cardiac evaluation' };
     }
     if (patient.redFlags.newOnsetParalysisOrSlurredSpeech) {
-      return { action: 'Amber', reason: 'Neurological symptom flag confirmed — urgent neurological assessment needed' };
+      return { action: 'Red', reason: 'Neurological symptom flag confirmed — urgent neurological assessment needed' };
     }
     if (patient.redFlags.unconsciousOrUnresponsive) {
-      return { action: 'Amber', reason: 'Altered consciousness flag confirmed — urgent evaluation required' };
+      return { action: 'Red', reason: 'Altered consciousness flag confirmed — urgent evaluation required' };
     }
     if (patient.redFlags.severeBreathingDifficulty) {
-      return { action: 'Amber', reason: 'Severe breathing difficulty flag confirmed — urgent respiratory evaluation' };
+      return { action: 'Red', reason: 'Severe breathing difficulty flag confirmed — urgent respiratory evaluation' };
     }
     if (patient.redFlags.activeHeavyBleeding) {
-      return { action: 'Amber', reason: 'Active bleeding flag confirmed — urgent assessment required' };
+      return { action: 'Red', reason: 'Active bleeding flag confirmed — urgent assessment required' };
     }
 
     // ── 1. Free-text Amber patterns (catches what vitals/flags alone cannot) ──
@@ -126,8 +128,8 @@ export class ClinicalRuleEngine {
     }
 
     // ── 4. High-risk demographics ──
-    if (patient.age < 1 || patient.age > 75) {
-      return { action: 'Amber', reason: 'High-risk age demographic (< 1 or > 75 years)' };
+    if (patient.age < 10 || patient.age > 75) {
+      return { action: 'Amber', reason: 'High-risk age demographic (< 10 or > 75 years)' };
     }
 
     // ── 5. Default Green ──

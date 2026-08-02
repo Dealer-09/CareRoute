@@ -28,10 +28,12 @@ export const DURATION_LABELS = DURATION_OPTIONS.map(d => d.label)
 
 /**
  * Convert a duration label to hours.
- * Falls back to 24 h if the label is not found (safe default).
+ * Throws if the label is not a known option — this should never happen
+ * in production because the UI only allows values from DURATION_LABELS.
  */
 export function durationLabelToHours(label: string | undefined): number {
   if (!label) return 24
   const match = DURATION_OPTIONS.find(d => d.label === label)
-  return match ? match.hours : 24
+  if (!match) throw new Error(`[durations] Unknown duration label: "${label}". Must be one of: ${DURATION_LABELS.join(', ')}`)
+  return match.hours
 }

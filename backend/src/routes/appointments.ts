@@ -28,6 +28,9 @@ doctorRouter.get('/', async (req, res) => {
 // GET /api/doctors/:id/slots — available slots for next 7 days
 doctorRouter.get('/:id/slots', async (req, res) => {
   const { id } = req.params
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return res.status(400).json({ error: 'Invalid doctor ID format' })
+  }
   try {
     const result = await query(
       `SELECT id, starts_at
@@ -143,6 +146,9 @@ appointmentRouter.patch('/:id/cancel', requireAuth, async (req: AuthRequest, res
   try {
     const userId = req.user!.id
     const { id } = req.params
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(400).json({ error: 'Invalid appointment ID format' })
+    }
 
     const apptRes = await query(
       `SELECT a.id, a.slot_id, a.status

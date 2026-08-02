@@ -104,6 +104,11 @@ export const PrescriptionUploader: React.FC<Props> = ({ onExtraction, onFileSele
   }
 
   const handleFileProcess = async (f: File) => {
+    if (f.size > 10 * 1024 * 1024) {
+      setErrorMsg('File too large — maximum size is 10 MB')
+      setStatus('error')
+      return
+    }
     setFile(f)
     onFileSelect(f)
     setPreview(URL.createObjectURL(f))
@@ -227,7 +232,7 @@ export const PrescriptionUploader: React.FC<Props> = ({ onExtraction, onFileSele
     setIsDragging(false)
     const droppedFile = e.dataTransfer.files?.[0]
     if (droppedFile && droppedFile.type.startsWith('image/')) {
-      handleFileProcess(droppedFile)
+      void handleFileProcess(droppedFile)
     }
   }
 
@@ -294,7 +299,7 @@ export const PrescriptionUploader: React.FC<Props> = ({ onExtraction, onFileSele
             ref={fileInputRef}
             onChange={(e) => {
               const f = e.target.files?.[0]
-              if (f) handleFileProcess(f)
+              if (f) void handleFileProcess(f)
             }}
           />
         </div>

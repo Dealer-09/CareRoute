@@ -101,8 +101,10 @@ export default function Clinician() {
     if (!token) { setError('Not authenticated'); setLoading(false); return }
 
     // 1. Load initial queue via REST
+    const controller = new AbortController()
     fetch(`${BACKEND_URL}/api/triage/queue`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
     })
       .then(res => {
         if (res.status === 403) {
@@ -170,7 +172,7 @@ export default function Clinician() {
                     }
                     lastQueueFetchAt.current = new Date().toISOString()
                   })
-                  .catch(() => {})
+                  .catch((e) => { if ((e as Error).name !== 'AbortError') console.warn('[Clinician] SSE reconnect fetch failed:', e) })
               }
               connectSSE()
             }, 5000)
@@ -186,6 +188,7 @@ export default function Clinician() {
 
     return () => { 
       clearTimeout(reconnectTimeout)
+      controller.abort()
       if (sseRef.current) sseRef.current.close()
       setLiveConnected(false) 
     }

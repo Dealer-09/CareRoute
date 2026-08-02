@@ -3,7 +3,7 @@ import { z } from 'zod'
 import jwt from 'jsonwebtoken'
 import rateLimit from 'express-rate-limit'
 import { query } from '../db/connection'
-import { requireAuth, AuthRequest } from '../middleware/auth'
+import { requireAuth, requireClinician, AuthRequest } from '../middleware/auth'
 import { sendEmergencyAlert } from '../lib/telegram'
 import { addConnection, removeConnection, broadcast } from '../lib/sse'
 import { scheduleFollowUp } from '../lib/followup'
@@ -268,13 +268,8 @@ router.get('/queue/stream', (req, res, next) => {
 })
 
 // Clinician-only route: all triage cases across all patients
-router.get('/queue', requireAuth, async (req: AuthRequest, res) => {
+router.get('/queue', requireAuth, requireClinician, async (req: AuthRequest, res) => {
   try {
-    const { role } = req.user!
-    if (role !== 'doctor' && role !== 'admin') {
-      return res.status(403).json({ error: 'Clinician access required' })
-    }
-
     const sinceDate = req.query.since && !isNaN(new Date(req.query.since as string).getTime())
       ? new Date(req.query.since as string).toISOString()
       : null
@@ -326,12 +321,9 @@ router.get('/queue', requireAuth, async (req: AuthRequest, res) => {
 })
 
 // Clinician-only route: mark a case as reviewed
-router.patch('/:id/review', requireAuth, async (req: AuthRequest, res) => {
+router.patch('/:id/review', requireAuth, requireClinician, async (req: AuthRequest, res) => {
   try {
-    const { role, id: userId } = req.user!
-    if (role !== 'doctor' && role !== 'admin') {
-      return res.status(403).json({ error: 'Clinician access required' })
-    }
+    const { id: userId } = req.user!
 
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
     const result = await query(
@@ -359,12 +351,9 @@ router.patch('/:id/review', requireAuth, async (req: AuthRequest, res) => {
 })
 
 // Clinician-only route: save/update clinical note on a case
-router.patch('/:id/note', requireAuth, async (req: AuthRequest, res) => {
+router.patch('/:id/note', requireAuth, requireClinician, async (req: AuthRequest, res) => {
   try {
-    const { role, id: userId } = req.user!
-    if (role !== 'doctor' && role !== 'admin') {
-      return res.status(403).json({ error: 'Clinician access required' })
-    }
+    const { id: userId } = req.user!
 
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
     const { note } = z.object({ note: z.string().max(2000) }).parse(req.body)

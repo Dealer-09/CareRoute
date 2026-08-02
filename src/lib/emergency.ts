@@ -35,6 +35,16 @@ const STANDALONE_PATTERNS: Array<{ keywords: string[]; label: string; flag: stri
     label: 'Patient reports suspected cardiac event',
     flag: 'Cardiac emergency',
   },
+  {
+    keywords: ['unconscious', 'passed out', 'fainted', 'blacked out', 'unresponsive', 'collapsed and unresponsive'],
+    label: 'Loss of consciousness — immediate emergency response required',
+    flag: 'Loss of consciousness',
+  },
+  {
+    keywords: ['gasping', 'gasping for air', 'no air', 'no air getting in', 'choking', 'airway blocked'],
+    label: 'Severe airway compromise — gasping or complete breathing obstruction',
+    flag: 'Airway emergency',
+  },
 ]
 
 const CHEST_KEYWORDS = ['chest pain', 'chest tightness', 'tight chest', 'pressure in chest', 'chest pressure']

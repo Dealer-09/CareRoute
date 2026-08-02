@@ -29,8 +29,8 @@ function statusBadge(s: string) {
 function formatDateTime(iso: string) {
   const d = new Date(iso)
   return {
-    date: d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }),
-    time: d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+    date: d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }),
+    time: d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }),
   }
 }
 
@@ -48,13 +48,16 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     if (!token) { setLoading(false); return }
+    const controller = new AbortController()
     fetch(`${BACKEND_URL}/api/appointments`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
     })
       .then(r => r.json())
       .then(data => setAppointments(data.appointments ?? []))
-      .catch(() => setError('Could not load appointments.'))
+      .catch((e) => { if ((e as Error).name !== 'AbortError') setError('Could not load appointments.') })
       .finally(() => setLoading(false))
+    return () => controller.abort()
   }, [token])
 
   async function cancel(id: string) {

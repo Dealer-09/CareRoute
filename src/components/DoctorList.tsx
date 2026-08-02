@@ -38,7 +38,8 @@ export default function DoctorList({ specialty, triageCaseId }: Props) {
         if (!res.ok) throw new Error()
         const data = await res.json()
         setDoctors(data?.doctors?.length > 0 ? data.doctors : await fallbackGeneralMedicine())
-      } catch {
+      } catch (e) {
+        console.warn('[DoctorList] Failed to load doctors:', e)
         setDoctors([])
       } finally {
         setLoading(false)

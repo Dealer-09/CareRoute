@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 import { BACKEND_URL } from '@/lib/api'
 
 import React, { useEffect, useState } from 'react'
@@ -179,7 +179,7 @@ export default function SlotPicker({ doctorId, doctorName, feeInr, triageCaseId,
                 {' · '}{formatTime(selected.starts_at)}
                 {' · 30 min'}
               </div>
-              <Button onClick={confirmBooking} disabled={booking} className="gap-2">
+              <Button onClick={() => void confirmBooking()} disabled={booking} className="gap-2">
                 {booking ? <><Loader2 size={14} className="animate-spin" />Booking…</> : 'Confirm'}
               </Button>
             </div>

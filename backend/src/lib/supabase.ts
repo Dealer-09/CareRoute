@@ -2,7 +2,12 @@ import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 
-dotenv.config({ path: path.join(__dirname, '../../../.env.local') })
+dotenv.config({
+  path: path.join(
+    __dirname,
+    process.env.NODE_ENV === 'production' ? '../../../.env.production' : '../../../.env.local'
+  ),
+})
 
 const supabaseUrl = process.env.SUPABASE_URL ?? ''
 const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY ?? ''
@@ -12,9 +17,10 @@ if (!supabaseUrl || !supabaseServiceKey) {
 }
 
 // Service-role client — bypasses RLS, server-side only, never expose to client
-export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false },
-})
+// Guard: createClient throws if URL is empty string, so only initialise when both vars are present
+export const supabase = (supabaseUrl && supabaseServiceKey)
+  ? createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } })
+  : null as any
 
 export const BUCKET = 'patient-documents'
 
@@ -29,7 +35,7 @@ export async function ensureStorageBucket(): Promise<void> {
       console.warn(`[storage] Could not list buckets: ${listErr.message}`)
       return
     }
-    const exists = buckets?.some(b => b.name === BUCKET)
+    const exists = buckets?.some((b: { name: string }) => b.name === BUCKET)
     if (!exists) {
       const { error: createErr } = await supabase.storage.createBucket(BUCKET, {
         public: false,          // signed URLs only — never public

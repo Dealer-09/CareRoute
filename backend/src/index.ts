@@ -47,15 +47,6 @@ app.use(express.json())
 // Auth routes have their own tighter limiter (10/15 min) defined in auth.ts.
 // These limiters cover everything else.
 
-// Triage saves: expensive (runs engines + DB write + potential Telegram call)
-const triageLimiter = rateLimit({
-  windowMs: 60 * 1000,   // 1 minute
-  max: 10,               // 10 triage saves per minute per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many triage requests. Please wait a moment before trying again.' },
-})
-
 // Maps: proxies Overpass API — protect against hammering the free OSM endpoint
 const mapsLimiter = rateLimit({
   windowMs: 60 * 1000,   // 1 minute
@@ -77,7 +68,7 @@ const generalLimiter = rateLimit({
 // Routes
 app.use('/api/health', healthRoutes)
 app.use('/api/auth', authRoutes)                              // has its own authLimiter (10/15 min)
-app.use('/api/triage', triageRoutes)   // triageLimiter applied per-route on POST /save only
+app.use('/api/triage', triageRoutes)   // saveLimiter applied per-route on POST /save in triage.ts
 app.use('/api/profile', generalLimiter, profileRoutes)
 app.use('/api/documents', generalLimiter, documentRoutes)
 app.use('/api/maps', mapsLimiter, mapsRoutes)

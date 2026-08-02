@@ -165,8 +165,10 @@ DO $$ BEGIN
 END $$;
 
 -- ─── Indexes — after migrations so all columns exist ──────────────────────────
-CREATE INDEX IF NOT EXISTS idx_patients_user_id            ON patients(user_id);
+-- Note: idx_patients_user_id_unique (UNIQUE) covers all lookup needs for patients(user_id).
+-- The non-unique idx_patients_user_id is redundant and has been removed.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_patients_user_id_unique ON patients(user_id);
+CREATE INDEX IF NOT EXISTS idx_triage_cases_patient_id     ON triage_cases(patient_id);
 CREATE INDEX IF NOT EXISTS idx_doctors_user_id             ON doctors(user_id);
 CREATE INDEX IF NOT EXISTS idx_triage_cases_reviewed_by    ON triage_cases(reviewed_by);
 CREATE INDEX IF NOT EXISTS idx_triage_cases_for_dependent_id ON triage_cases(for_dependent_id);
@@ -188,3 +190,4 @@ CREATE INDEX IF NOT EXISTS idx_appointments_doctor_id      ON appointments(docto
 CREATE INDEX IF NOT EXISTS idx_appointments_status         ON appointments(status);
 CREATE INDEX IF NOT EXISTS idx_dependents_user_id          ON dependents(user_id);
 CREATE INDEX IF NOT EXISTS idx_follow_ups_due_at           ON follow_ups(due_at) WHERE sent = FALSE;
+CREATE INDEX IF NOT EXISTS idx_doctors_specialty            ON doctors(specialty);

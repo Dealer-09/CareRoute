@@ -139,8 +139,8 @@ export default function Timeline() {
             <div className="absolute left-[1.35rem] top-3 bottom-3 w-0.5 bg-slate-200" />
 
             <div className="space-y-6">
-              {sorted.map((item, i) => (
-                <div key={i} className="flex gap-5 items-start">
+              {sorted.map((item) => (
+                <div key={item.id ?? item.timestamp} className="flex gap-5 items-start">
                   {/* Dot */}
                   <div className={`relative z-10 w-5 h-5 rounded-full shrink-0 mt-2 ${severityDot(item.severity)}`} />
 
@@ -190,6 +190,7 @@ export default function Timeline() {
             </div>
           </div>
         )}
+
       </main>
     </div>
   )

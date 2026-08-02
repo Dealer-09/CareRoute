@@ -95,20 +95,20 @@ export async function POST(req: NextRequest) {
       }
     } else {
       // Guest triage fallback
-      if (body.dependent?.date_of_birth) {
+      if (typeof body.dependent === 'object' && body.dependent?.date_of_birth) {
         calculatedAge = Math.floor((Date.now() - new Date(body.dependent.date_of_birth).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
       } else if (body.age) {
         calculatedAge = body.age;
       }
-      calculatedSex = body.dependent?.gender === 'M' ? 'MALE' : (body.dependent?.gender === 'F' ? 'FEMALE' : 'OTHER');
+      calculatedSex = (typeof body.dependent === 'object' && body.dependent?.gender === 'M') ? 'MALE' :
+                      (typeof body.dependent === 'object' && body.dependent?.gender === 'F') ? 'FEMALE' : 'OTHER';
     }
 
     // Extract user ID from JWT if present, otherwise guest
     let patientId = 'GUEST-' + Date.now()
-    const authHeader2 = req.headers.get('authorization')
-    if (authHeader2?.startsWith('Bearer ')) {
+    if (authHeader?.startsWith('Bearer ')) {
       try {
-        const payload = JSON.parse(atob(authHeader2.split('.')[1]))
+        const payload = JSON.parse(atob(authHeader.split('.')[1]))
         if (payload?.id) patientId = payload.id
       } catch { /* guest fallback */ }
     }
@@ -147,6 +147,7 @@ export async function POST(req: NextRequest) {
       patientPresentation.redFlags.unconsciousOrUnresponsive ||
       patientPresentation.redFlags.severeBreathingDifficulty ||
       patientPresentation.redFlags.suddenSevereChestPain ||
+      patientPresentation.redFlags.activeHeavyBleeding ||
       patientPresentation.redFlags.newOnsetParalysisOrSlurredSpeech ? 'Red' :
       result.finalDecision === 'Red' || result.finalDecision === 'ESCALATED' ? 'Red' :
       result.finalDecision === 'Amber' ? 'Amber' : 'Green';

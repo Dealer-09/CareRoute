@@ -80,6 +80,8 @@ export default function Dashboard() {
   const [user, setUser] = useState<{ id: string, email: string, role: string } | null>(null)
 
   useEffect(() => {
+    const controller = new AbortController()
+
     async function loadData() {
       const token = localStorage.getItem('careRouteToken')
       const storedUser = localStorage.getItem('careRouteUser')
@@ -96,7 +98,8 @@ export default function Dashboard() {
       if (token) {
         try {
           const res = await fetch(`${BACKEND_URL}/api/triage/history`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 'Authorization': `Bearer ${token}` },
+            signal: controller.signal,
           })
           if (res.ok) {
             const data = await res.json()
@@ -105,6 +108,7 @@ export default function Dashboard() {
             return
           }
         } catch (e) {
+          if ((e as Error).name === 'AbortError') return
           console.error('Failed to load DB history', e)
         }
       }
@@ -116,7 +120,7 @@ export default function Dashboard() {
     
     // Small delay to avoid hydration mismatch
     const t = setTimeout(loadData, 80)
-    return () => clearTimeout(t)
+    return () => { clearTimeout(t); controller.abort() }
   }, [])
 
   const filteredHistory = history.filter(
@@ -344,11 +348,11 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredHistory.map((item, i) => {
+              {filteredHistory.map((item) => {
                 const specialty = item.recommended_specialty
                 return (
                   <div
-                    key={i}
+                    key={item.id ?? item.timestamp}
                     className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer relative overflow-hidden group"
                   >
                     {/* Severity bar */}
@@ -372,6 +376,7 @@ export default function Dashboard() {
                                   day: 'numeric',
                                   month: 'short',
                                   year: 'numeric',
+                                  timeZone: 'Asia/Kolkata',
                                 })}
                               </span>
                             )}

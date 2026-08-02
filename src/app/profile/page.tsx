@@ -61,16 +61,18 @@ export default function ProfilePage() {
       })
       const d = await r.json()
       if (d.dependents) setDependents(d.dependents)
-    } catch { /* ignore */ }
+    } catch (e) { console.warn('[Profile] Failed to load dependents:', e) }
   }
 
   useEffect(() => {
+    const controller = new AbortController()
     async function loadProfile() {
       const token = localStorage.getItem('careRouteToken')
       if (!token) { window.location.href = '/'; return }
       try {
         const res = await fetch(`${BACKEND_URL}/api/profile`, {
           headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
         })
         if (!res.ok) throw new Error('Failed to load profile')
         const data: Profile = await res.json()
@@ -80,13 +82,15 @@ export default function ProfilePage() {
         setGender(data.gender || '')
         setPhone(data.phone || '')
         fetchDependents(token)
-      } catch {
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') return
         setErrorMsg('Could not load your profile. Please try again.')
       } finally {
         setLoading(false)
       }
     }
     loadProfile()
+    return () => controller.abort()
   }, [])
 
   async function handleSave(e: React.FormEvent) {
@@ -111,8 +115,10 @@ export default function ProfilePage() {
       setProfile(prev => prev ? { ...prev, ...updated } : prev)
       const storedUser = localStorage.getItem('careRouteUser')
       if (storedUser) {
-        const user = JSON.parse(storedUser)
-        localStorage.setItem('careRouteUser', JSON.stringify({ ...user, name: updated.name }))
+        try {
+          const user = JSON.parse(storedUser)
+          localStorage.setItem('careRouteUser', JSON.stringify({ ...user, name: updated.name }))
+        } catch { /* corrupted localStorage — skip update */ }
       }
       setStatus('saved')
       setTimeout(() => setStatus('idle'), 3000)
@@ -124,34 +130,44 @@ export default function ProfilePage() {
 
   async function addDependent() {
     if (!depName.trim() || !depRelation.trim()) return
+    const token = localStorage.getItem('careRouteToken')
+    if (!token) return
     setDepStatus('saving')
-    const token = localStorage.getItem('careRouteToken') ?? ''
-    const r = await fetch(`${BACKEND_URL}/api/dependents`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        name: depName,
-        date_of_birth: depDob || null,
-        gender: depGender || null,
-        relationship: depRelation,
-      }),
-    })
-    if (r.ok) {
-      await fetchDependents(token)
-      setDepName(''); setDepDob(''); setDepGender(''); setDepRelation('')
-      setAddingDep(false); setDepStatus('idle')
-    } else {
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/dependents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name: depName.trim(),
+          date_of_birth: depDob || undefined,
+          gender: depGender || undefined,
+          relationship: depRelation,
+        }),
+      })
+      if (r.ok) {
+        await fetchDependents(token)
+        setDepName(''); setDepDob(''); setDepGender(''); setDepRelation('')
+        setAddingDep(false); setDepStatus('idle')
+      } else {
+        setDepStatus('error')
+      }
+    } catch {
       setDepStatus('error')
     }
   }
 
   async function removeDependent(id: string) {
-    const token = localStorage.getItem('careRouteToken') ?? ''
-    await fetch(`${BACKEND_URL}/api/dependents/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    setDependents(prev => prev.filter(d => d.id !== id))
+    const token = localStorage.getItem('careRouteToken')
+    if (!token) return
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/dependents/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (r.ok) {
+        setDependents(prev => prev.filter(d => d.id !== id))
+      }
+    } catch { /* silent — item stays in list */ }
   }
 
   if (loading) {

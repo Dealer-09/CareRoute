@@ -4,7 +4,12 @@ import path from 'path'
 
 // Use __dirname so this works regardless of where the process is started from
 // (e.g. Docker, monorepo scripts, or running ts-node from a different cwd)
-dotenv.config({ path: path.join(__dirname, '../../../.env.local') })
+dotenv.config({
+  path: path.join(
+    __dirname,
+    process.env.NODE_ENV === 'production' ? '../../../.env.production' : '../../../.env.local'
+  ),
+})
 
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is missing in .env.local')
@@ -38,7 +43,11 @@ export const transaction = async <T>(callback: (client: PoolClient) => Promise<T
     await client.query('COMMIT')
     return result
   } catch (e) {
-    await client.query('ROLLBACK')
+    try {
+      await client.query('ROLLBACK')
+    } catch (rollbackErr) {
+      console.error('[db] ROLLBACK failed — original error follows:', rollbackErr)
+    }
     throw e
   } finally {
     client.release()

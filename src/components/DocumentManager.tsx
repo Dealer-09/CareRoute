@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 import { BACKEND_URL } from '@/lib/api'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
@@ -66,6 +66,11 @@ export default function DocumentManager() {
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !token) return
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError('File too large — maximum size is 10 MB')
+      if (fileRef.current) fileRef.current.value = ''
+      return
+    }
     setUploadError('')
     setUploading(true)
 
@@ -132,7 +137,7 @@ export default function DocumentManager() {
             accept=".pdf,.jpg,.jpeg,.png,.webp"
             className="hidden"
             id="doc-upload-input"
-            onChange={handleUpload}
+            onChange={(e) => void handleUpload(e)}
             disabled={uploading}
           />
           <Button

@@ -92,16 +92,16 @@ export class TriagePipeline {
       timestamp,
       patientIdHash: `hash_${patient.patientId}`, // Anonymized
       versions: {
-        visionModel: 'donut-rxhandbd-1.0',
-        entityResolver: 'sapbert-hybrid-2.1',
-        triageModel: 'clinical-rule-engine-v1', // Replaced XGBoost for CDSCO SaMD compliance
-        oodModel: 'isolation-forest-mimic-v1',
-        pkbDatabase: 'CDSCO-CDCI-2026.07.24',
-        ruleEngine: 'safety-gateway-v1'
+        visionModel:    'donut-rxhandbd-1.0',          // Fine-tuned Donut TFLite (OCR feature, separate from triage)
+        entityResolver: 'not-implemented',              // SapBERT hybrid reranker — Phase 8 roadmap item
+        triageModel:    'clinical-rule-engine-v1',      // Deterministic Manchester/ESI rules (active)
+        oodModel:       'heuristic-stub-v1',            // Real isolation-forest pending ONNX integration
+        pkbDatabase:    'tata-1mg-251k-2026.07',        // 251k Indian drug names from Tata 1mg dataset
+        ruleEngine:     'safety-gateway-v1'             // SafetyEngine red-flag + plausibility rules (active)
       },
       scores: {
-        ocrConfidence: 0.94, // Mocked for this level
-        entityResolutionConfidence: 0.96, // Mocked
+        ocrConfidence: 0,               // OCR not invoked during text-only triage
+        entityResolutionConfidence: 0,  // Entity resolver not implemented (Phase 8)
         semanticOodDistance: semanticOod,
         tabularOodDistance: tabularOod
       },

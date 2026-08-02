@@ -98,7 +98,7 @@ export default function AuthModal({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleAction()
+    if (e.key === 'Enter') void handleAction()
   }
 
   return (

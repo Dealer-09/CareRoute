@@ -132,41 +132,49 @@ export default function AdminPanel() {
   // Load stats + recent on mount
   useEffect(() => {
     if (!ready) return
+    const controller = new AbortController()
     setStatsLoading(true)
     Promise.all([api('/stats'), api('/triage/recent')])
       .then(([s, r]) => { setStats(s); setRecent(r.cases) })
-      .catch(console.error)
+      .catch((e) => { if ((e as Error).name !== 'AbortError') console.error(e) })
       .finally(() => setStatsLoading(false))
+    return () => controller.abort()
   }, [ready, api])
 
   // Load users when tab selected or search changes
   useEffect(() => {
     if (!ready || tab !== 'users') return
+    const controller = new AbortController()
     setUsersLoading(true)
     api(`/users?search=${encodeURIComponent(userSearch)}&limit=50`)
       .then(d => { setUsers(d.users); setUsersTotal(d.total) })
-      .catch(console.error)
+      .catch((e) => { if ((e as Error).name !== 'AbortError') console.error(e) })
       .finally(() => setUsersLoading(false))
+    return () => controller.abort()
   }, [ready, tab, userSearch, api])
 
   // Load audit when tab selected or filter changes
   useEffect(() => {
     if (!ready || tab !== 'audit') return
+    const controller = new AbortController()
     setAuditLoading(true)
     api(`/audit?action=${encodeURIComponent(auditFilter)}&limit=100`)
       .then(d => setAudit(d.audit))
-      .catch(console.error)
+      .catch((e) => { if ((e as Error).name !== 'AbortError') console.error(e) })
       .finally(() => setAuditLoading(false))
+    return () => controller.abort()
   }, [ready, tab, auditFilter, api])
 
   // Load compliance decisions
   useEffect(() => {
     if (!ready || tab !== 'compliance') return
+    const controller = new AbortController()
     setDecisionsLoading(true)
     api(`/compliance/decisions?severity=${encodeURIComponent(decisionsSeverity)}&limit=50`)
       .then(d => setDecisions(d.decisions))
-      .catch(console.error)
+      .catch((e) => { if ((e as Error).name !== 'AbortError') console.error(e) })
       .finally(() => setDecisionsLoading(false))
+    return () => controller.abort()
   }, [ready, tab, decisionsSeverity, api])
 
   async function changeRole(userId: string, newRole: string) {
@@ -364,7 +372,7 @@ export default function AdminPanel() {
                               <select
                                 value={u.role}
                                 disabled={roleChanging === u.id}
-                                onChange={e => changeRole(u.id, e.target.value)}
+                                onChange={e => void changeRole(u.id, e.target.value)}
                                 className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 pr-6 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white cursor-pointer"
                               >
                                 <option value="patient">patient</option>
@@ -379,17 +387,17 @@ export default function AdminPanel() {
                             {/* Delete */}
                             {deleting === u.id + '_confirm' ? (
                               <div className="flex items-center gap-1">
-                                <button onClick={() => deleteUser(u.id, u.email)} className="text-[10px] bg-red-500 text-white px-2 py-1 rounded">Sure?</button>
+                                <button onClick={() => void deleteUser(u.id, u.email)} className="text-[10px] bg-red-500 text-white px-2 py-1 rounded">Sure?</button>
                                 <button onClick={() => setDeleting(null)} className="text-[10px] bg-slate-200 text-slate-700 px-2 py-1 rounded">Cancel</button>
                               </div>
                             ) : (
                               <button
                                 onClick={() => setDeleting(u.id + '_confirm')}
-                                disabled={deleting === u.id}
+                                disabled={deleting === u.id || deleting === u.id + '_confirm'}
                                 className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
                                 title="Delete user"
                               >
-                                {deleting === u.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                                {deleting === u.id || deleting === u.id + '_confirm' ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                               </button>
                             )}
                           </div>

@@ -83,6 +83,9 @@ router.get('/users', requireAuth, requireAdmin, async (req, res) => {
 router.patch('/users/:id/role', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(400).json({ error: 'Invalid user ID format' })
+    }
     const { role } = z.object({ role: z.enum(['patient', 'doctor', 'admin']) }).parse(req.body)
 
     // Prevent self-demotion
@@ -118,6 +121,9 @@ router.patch('/users/:id/role', requireAuth, requireAdmin, async (req: AuthReque
 router.delete('/users/:id', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(400).json({ error: 'Invalid user ID format' })
+    }
     if (id === req.user!.id) {
       return res.status(400).json({ error: 'Cannot delete your own account' })
     }
@@ -210,6 +216,10 @@ router.get('/triage/recent', requireAuth, requireAdmin, async (_req, res) => {
 router.get('/compliance/decisions', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { limit = '100', offset = '0', severity = '' } = req.query as Record<string, string>
+
+    if (severity && !['Green', 'Amber', 'Red'].includes(severity)) {
+      return res.status(400).json({ error: 'severity must be Green, Amber, or Red' })
+    }
 
     const result = await query(
       `SELECT

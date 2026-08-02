@@ -36,24 +36,24 @@ export class SafetyEngine {
   private checkPhysiologicalPlausibility(patient: PatientPresentation): SafetyEvaluationResult | null {
     const { vitals } = patient;
 
-    if (vitals.spo2Percent !== undefined && (vitals.spo2Percent < 0 || vitals.spo2Percent > 100)) {
+    if (vitals.spo2Percent !== undefined && (Number.isNaN(vitals.spo2Percent) || vitals.spo2Percent < 0 || vitals.spo2Percent > 100)) {
       return { action: 'REJECT_INVALID_DATA', reason: `SpO2 ${vitals.spo2Percent}% is physically impossible`, ruleTriggered: 'PLAUSIBILITY_SPO2' };
     }
-    
-    if (vitals.heartRateBpm !== undefined && (vitals.heartRateBpm <= 0 || vitals.heartRateBpm > 300)) {
+
+    if (vitals.heartRateBpm !== undefined && (Number.isNaN(vitals.heartRateBpm) || vitals.heartRateBpm <= 0 || vitals.heartRateBpm > 300)) {
       return { action: 'REJECT_INVALID_DATA', reason: `Heart rate ${vitals.heartRateBpm} BPM is physiologically implausible`, ruleTriggered: 'PLAUSIBILITY_HR' };
     }
 
-    if (vitals.systolicBp !== undefined && (vitals.systolicBp < 40 || vitals.systolicBp > 300)) {
+    if (vitals.systolicBp !== undefined && (Number.isNaN(vitals.systolicBp) || vitals.systolicBp < 40 || vitals.systolicBp > 300)) {
       return { action: 'REJECT_INVALID_DATA', reason: `Systolic BP ${vitals.systolicBp} is physiologically impossible`, ruleTriggered: 'PLAUSIBILITY_SYSTOLIC_BP' };
     }
 
-    if (vitals.temperatureCelsius !== undefined && (vitals.temperatureCelsius < 20 || vitals.temperatureCelsius > 45)) {
+    if (vitals.temperatureCelsius !== undefined && (Number.isNaN(vitals.temperatureCelsius) || vitals.temperatureCelsius < 20 || vitals.temperatureCelsius > 45)) {
       return { action: 'REJECT_INVALID_DATA', reason: `Temperature ${vitals.temperatureCelsius}°C is physically impossible for a living human`, ruleTriggered: 'PLAUSIBILITY_TEMP' };
     }
 
     if (vitals.systolicBp !== undefined && vitals.diastolicBp !== undefined) {
-      if (vitals.diastolicBp >= vitals.systolicBp) {
+      if (Number.isNaN(vitals.diastolicBp) || vitals.diastolicBp >= vitals.systolicBp) {
         return { action: 'REJECT_INVALID_DATA', reason: `Diastolic BP cannot be >= Systolic BP`, ruleTriggered: 'PLAUSIBILITY_BP_INVERSION' };
       }
     }
@@ -102,8 +102,8 @@ export class SafetyEngine {
       return { action: 'ROUTE_RED', reason: `Severe hypothermia: Temperature is ${vitals.temperatureCelsius}°C`, ruleTriggered: 'VITAL_TEMP_HYPOTHERMIA' };
     }
 
-    if (vitals.temperatureCelsius !== undefined && vitals.temperatureCelsius < 32) {
-      return { action: 'ROUTE_RED', reason: `Severe hypothermia: Temperature is ${vitals.temperatureCelsius}°C`, ruleTriggered: 'VITAL_TEMP_HYPOTHERMIA' };
+    if (vitals.temperatureCelsius !== undefined && vitals.temperatureCelsius >= 41) {
+      return { action: 'ROUTE_RED', reason: `Extreme hyperthermia: Temperature is ${vitals.temperatureCelsius}°C — risk of febrile convulsion or heat stroke`, ruleTriggered: 'VITAL_TEMP_HYPERTHERMIA' };
     }
 
     return null; // No red flags triggered
