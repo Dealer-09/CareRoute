@@ -55,12 +55,12 @@ export class OodEngine {
    */
   private calculateSemanticDistance(text: string): number {
     // Simulate detecting a clearly out-of-distribution input
-    if (text.toLowerCase().includes('cobra')) return 0.99;
+    if ((text ?? '').toLowerCase().includes('cobra')) return 0.99;
     
     // Cap at 0.75 — well below the 0.85 threshold — so normal detailed symptom
     // descriptions never trigger abstention. Real OOD detection requires a trained
     // embedding model; this stub should be conservative, not punishing.
-    return Math.min(0.75, 0.10 + (text.length * 0.003));
+    return Math.min(0.75, 0.10 + ((text ?? '').length * 0.003));
   }
 
   /**

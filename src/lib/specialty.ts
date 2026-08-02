@@ -86,7 +86,7 @@ const SPECIALTY_RULES: Array<{
   },
 ]
 
-export function matchSpecialty(text: string, llmSuggested?: string): SpecialtyMatch {
+export function matchSpecialty(text: string = '', llmSuggested?: string): SpecialtyMatch {
   const lower = text.toLowerCase()
 
   for (const rule of SPECIALTY_RULES) {

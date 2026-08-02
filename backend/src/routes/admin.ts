@@ -148,10 +148,14 @@ router.delete('/users/:id', requireAuth, requireAdmin, async (req: AuthRequest, 
     // surface them in the response so the caller knows files may be orphaned.
     let storageWarning: string | null = null
     if (paths.length > 0) {
-      const { error: removeError } = await supabase.storage.from(BUCKET).remove(paths)
-      if (removeError) {
-        console.error('Supabase remove error (files orphaned — DB already deleted):', removeError)
-        storageWarning = `User deleted from DB but ${paths.length} storage file(s) could not be removed: ${removeError.message}`
+      if (!supabase) {
+        storageWarning = `User deleted from DB but ${paths.length} storage file(s) could not be removed: Supabase not configured`
+      } else {
+        const { error: removeError } = await supabase.storage.from(BUCKET).remove(paths)
+        if (removeError) {
+          console.error('Supabase remove error (files orphaned — DB already deleted):', removeError)
+          storageWarning = `User deleted from DB but ${paths.length} storage file(s) could not be removed: ${removeError.message}`
+        }
       }
     }
 

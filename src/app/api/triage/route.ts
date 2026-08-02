@@ -44,9 +44,30 @@ export async function POST(req: NextRequest) {
     // Because V2 XGBoost is mocked, we retain the V1 deterministic emergency check to ensure safety!
     const emergencyCheck = emergencyPreCheck(text, body.flags || [])
     if (emergencyCheck.triggered) {
+      const emergencyRecord = {
+        recordId: `DR-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        timestamp: new Date().toISOString(),
+        patientIdHash: 'emergency_precheck',
+        versions: {
+          visionModel:    'donut-rxhandbd-1.0',
+          entityResolver: 'not-implemented',
+          triageModel:    'emergency-precheck-v1',
+          oodModel:       'not-invoked',
+          pkbDatabase:    'tata-1mg-251k-2026.07',
+          ruleEngine:     'emergency-precheck-v1',
+        },
+        scores: { ocrConfidence: 0, entityResolutionConfidence: 0, semanticOodDistance: 0, tabularOodDistance: 0 },
+        rulesTriggered: emergencyCheck.redFlags,
+        triageProbabilityRed: 1.0,
+        triageProbabilityAmber: 0,
+        triageProbabilityGreen: 0,
+        finalDecision: 'Red' as const,
+        abstained: false,
+      }
       return NextResponse.json({
         severity: 'Red',
         emergency: true,
+        confidence: 100,
         condition_guess: 'Possible Emergency Condition',
         summary: `Immediate medical attention is recommended based on your symptoms: ${emergencyCheck.reasons.join('; ')}`,
         reasoning: emergencyCheck.reasons,
@@ -57,6 +78,7 @@ export async function POST(req: NextRequest) {
         self_care: [],
         escalation_signs: [],
         timestamp: Date.now(),
+        decision_record: emergencyRecord,
       })
     }
 

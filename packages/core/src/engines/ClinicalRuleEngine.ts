@@ -56,7 +56,7 @@ export class ClinicalRuleEngine {
    * Do NOT re-check those flags here — SafetyEngine owns them exclusively.
    */
   public evaluate(patient: PatientPresentation): RuleEvaluationResult {
-    const lower = patient.chiefComplaint.toLowerCase();
+    const lower = (patient.chiefComplaint ?? '').toLowerCase();
 
     // ── 1. Free-text Amber patterns (catches what vitals/flags alone cannot) ──
     for (const pattern of AMBER_TEXT_PATTERNS) {

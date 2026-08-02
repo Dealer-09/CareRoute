@@ -116,7 +116,7 @@ appointmentRouter.get('/', requireAuth, async (req: AuthRequest, res) => {
     const userId = req.user!.id
     const result = await query(
       `SELECT
-         a.id, a.status, a.notes, a.created_at,
+         a.id, a.status, a.notes AS clinician_note, a.created_at,
          s.starts_at,
          d.name  AS doctor_name,
          d.specialty,

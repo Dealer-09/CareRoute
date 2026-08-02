@@ -42,7 +42,12 @@ export class TriagePipeline {
     }
     
     if (safetyResult.action === 'ROUTE_RED') {
-      return this.generateAuditRecord(patient, timestamp, 'Red', false, undefined, [safetyResult.ruleTriggered]);
+      return this.generateAuditRecord(
+        patient, timestamp, 'Red', false, undefined,
+        [safetyResult.ruleTriggered],
+        0, 0,
+        { red: 1.0, amber: 0, green: 0 }  // Hard deterministic rule — maximum confidence
+      );
     }
 
     // 2. ENGINE 5: Out-Of-Distribution (OOD) Detection

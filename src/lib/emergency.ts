@@ -64,7 +64,7 @@ export type EmergencyCheckResult = {
   redFlags: string[]
 }
 
-export function emergencyPreCheck(text: string, flags: string[]): EmergencyCheckResult {
+export function emergencyPreCheck(text: string = '', flags: string[] = []): EmergencyCheckResult {
   const lower = text.toLowerCase()
   const reasons: string[] = []
   const redFlagSet = new Set<string>()

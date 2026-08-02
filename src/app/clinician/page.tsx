@@ -125,6 +125,7 @@ export default function Clinician() {
       .finally(() => setLoading(false))
 
     let reconnectTimeout: ReturnType<typeof setTimeout>
+    let reconnectAttempts = 0
     
     function connectSSE() {
       // 2. Subscribe to live updates via SSE ticket
@@ -138,7 +139,7 @@ export default function Clinician() {
           const es = new EventSource(`${BACKEND_URL}/api/triage/queue/stream?ticket=${ticket}`)
           sseRef.current = es
           
-          es.addEventListener('connected', () => setLiveConnected(true))
+          es.addEventListener('connected', () => { setLiveConnected(true); reconnectAttempts = 0 })
           es.addEventListener('new_case', (e: Event) => {
             try {
               const newCase = JSON.parse((e as MessageEvent).data) as QueueCase
@@ -156,6 +157,9 @@ export default function Clinician() {
             // This plugs the gap window without a full re-fetch of the entire queue
             const since = lastQueueFetchAt.current
             const sinceParam = since ? `?since=${encodeURIComponent(since)}` : ''
+            // Exponential backoff: 1s, 2s, 4s ... capped at 30s. Resets on successful connect.
+            reconnectAttempts++
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 30000)
             reconnectTimeout = setTimeout(() => {
               if (since) {
                 fetch(`${BACKEND_URL}/api/triage/queue${sinceParam}`, {
@@ -175,12 +179,14 @@ export default function Clinician() {
                   .catch((e) => { if ((e as Error).name !== 'AbortError') console.warn('[Clinician] SSE reconnect fetch failed:', e) })
               }
               connectSSE()
-            }, 5000)
+            }, delay)
           }
         })
         .catch(() => {
           setLiveConnected(false)
-          reconnectTimeout = setTimeout(connectSSE, 5000)
+          reconnectAttempts++
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 30000)
+          reconnectTimeout = setTimeout(connectSSE, delay)
         })
     }
 

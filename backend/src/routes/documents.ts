@@ -44,6 +44,11 @@ router.post('/upload', requireAuth, (req: AuthRequest, res, next) => {
       const userId = req.user!.id
       const { triage_case_id } = req.body // optional — link doc to a triage case
 
+      // Validate triage_case_id format if provided — prevents PostgreSQL 22P02 error
+      if (triage_case_id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(triage_case_id)) {
+        return res.status(400).json({ error: 'Invalid triage_case_id format' })
+      }
+
       // 1. Get patient ID
       const patientResult = await query('SELECT id FROM patients WHERE user_id = $1', [userId])
       if (patientResult.rows.length === 0) {
@@ -54,6 +59,11 @@ router.post('/upload', requireAuth, (req: AuthRequest, res, next) => {
       // 2. Build a unique storage path: {patientId}/{timestamp}-{originalname}
       const safeName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')
       const storagePath = `${patientId}/${Date.now()}-${safeName}`
+
+      // Guard: supabase is null when env vars are not configured
+      if (!supabase) {
+        return res.status(503).json({ error: 'File storage is not configured on this server' })
+      }
 
       // 3. Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
@@ -174,6 +184,9 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
     const { storage_path } = result.rows[0]
 
     // Remove from Supabase Storage
+    if (!supabase) {
+      return res.status(503).json({ error: 'File storage is not configured on this server' })
+    }
     const { error: deleteError } = await supabase.storage
       .from(BUCKET)
       .remove([storage_path])
