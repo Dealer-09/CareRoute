@@ -24,7 +24,7 @@ const saveLimiter = rateLimit({
 // Store short-lived SSE tickets (valid for 30s)
 const sseTickets = new Map<string, { id: string; role: string }>()
 
-router.post('/queue/ticket', requireAuth, (req: AuthRequest, res) => {
+router.post('/queue/ticket', requireAuth, requireClinician, (req: AuthRequest, res) => {
   const ticket = randomUUID()
   sseTickets.set(ticket, req.user!)
   setTimeout(() => sseTickets.delete(ticket), 30000)
