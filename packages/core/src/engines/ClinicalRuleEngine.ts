@@ -19,7 +19,7 @@ const AMBER_TEXT_PATTERNS: Array<{ keywords: string[]; reason: string }> = [
   },
   {
     keywords: ['face droop', 'facial droop', 'slurred', 'one side', 'one-sided',
-               'one-sided weakness', 'arm weakness', 'leg weakness on one side',
+               'one-sided weakness', 'arm weakness', 'leg weakness', 'weakness',
                'weakness in arm', 'weakness in leg', 'weakness on one side'],
     reason: 'Neurological symptom pattern (possible CVA) in free text',
   },
